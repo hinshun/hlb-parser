@@ -146,9 +146,16 @@ type CloseBrace struct {
 
 type FieldList struct {
 	Pos        lexer.Position
-	OpenParen  *OpenParen  `parser:"@@"`
-	Fields     []*Field    `parser:"( Newline? @@ ( Delimit Newline?  @@ )* ( Delimit Newline )? )?"`
-	CloseParen *CloseParen `parser:"@@"`
+	OpenParen  *OpenParen   `parser:"@@"`
+	Fields     []*FieldStmt `parser:"@@*"`
+	CloseParen *CloseParen  `parser:"@@"`
+}
+
+type FieldStmt struct {
+	Pos     lexer.Position
+	Field   *Field   `parser:"( @@ Delimit?"`
+	Newline *Newline `parser:"| @@"`
+	Comment *Comment `parser:"| @@ )"`
 }
 
 type Field struct {
@@ -334,9 +341,16 @@ type CallExpr struct {
 
 type ExprList struct {
 	Pos        lexer.Position
-	OpenParen  *OpenParen  `parser:"@@"`
-	Exprs      []*Expr     `parser:"( Newline? @@ ( Delimit Newline?  @@ )* ( Delimit Newline )? )?"`
-	CloseParen *CloseParen `parser:"@@"`
+	OpenParen  *OpenParen   `parser:"@@"`
+	Fields     []*ExprField `parser:"( Newline? @@ ( Delimit Newline?  @@ )* ( Delimit Newline )? )?"`
+	CloseParen *CloseParen  `parser:"@@"`
+}
+
+type ExprField struct {
+	Pos     lexer.Position
+	Expr    *Expr    `parser:"( @@ Delimit?"`
+	Newline *Newline `parser:"| @@"`
+	Comment *Comment `parser:"| @@ )"`
 }
 
 type IdentExpr struct {
@@ -376,26 +390,14 @@ func main() {
 func run() error {
 	mod := &Module{}
 	err := Parser.ParseString(`
-		import "./go.hlb" as go
-
-		# My docstrings
 		fs foo_bar(string foo, string gitVersion) {
-			go.build "./cmd/${foo}"
-			run <<~RUN
-				apt-get update &&
-				apt-get install
-					git=${gitVersion}
-					curl
-					wget
-			RUN with option {
-				mount scratch "/" "/"
-				commontOpts
-			}
+			copy image(<<~REF
+			           dockerregistry:7002/engtools/newt@sha256:${dgst}
+			REF) "/" "/" as (
+				dgst myDigest
+			)
 		}
 
-		option::run commonOpts() {
-			ignoreCache
-		}
 	`, mod)
 	repr.Println(mod)
 	return err
