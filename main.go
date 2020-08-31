@@ -19,7 +19,9 @@ var (
 			{"Decimal", `\b(0|[1-9][0-9]*)\b`, nil},
 			{"Bool", `\b(true|false)\b`, nil},
 			{"String", `"`, stateful.Push("String")},
-			{"Heredoc", `<<[-~]?(\w+)\b`, stateful.Push("Heredoc")},
+			{"RawString", "`", stateful.Push("RawString")},
+			{"Heredoc", `<<[-~]?(\w+)`, stateful.Push("Heredoc")},
+			{"RawHeredoc", "<<[-~]?`(\\w+)`", stateful.Push("RawHeredoc")},
 			{"Block", `{`, stateful.Push("Block")},
 			{"Paren", `\(`, stateful.Push("Paren")},
 			stateful.Include("Common"),
@@ -42,14 +44,23 @@ var (
 			{"Interpolated", `\${`, stateful.Push("Interpolated")},
 			{"Char", `[^"$\\]+`, nil},
 		},
+		"RawString": {
+			{"RawStringEnd", "`", stateful.Pop()},
+			{"RawChar", "[^`]+", nil},
+		},
 		"Heredoc": {
 			{"HeredocEnd", `\b\1\b`, stateful.Pop()},
 			{"Whitespace", `\s+`, nil},
 			{"Interpolated", `\${`, stateful.Push("Interpolated")},
 			{"Text", `[^\s$]+`, nil},
 		},
+		"RawHeredoc": {
+			{"RawHeredocEnd", `\b\1\b`, stateful.Pop()},
+			{"Whitespace", `\s+`, nil},
+			{"RawText", `[^\s]+`, nil},
+		},
 		"Interpolated": {
-			{"InterpolatedEnd", `}`, stateful.Pop()},
+			{"BlockEnd", `}`, stateful.Pop()},
 			stateful.Include("Root"),
 		},
 		"Block": {
@@ -75,12 +86,12 @@ type Module struct {
 }
 
 type Decl struct {
-	Pos          lexer.Position
-	Import       *ImportDecl   `parser:"( @@"`
-	Export       *ExportDecl   `parser:"| @@"`
-	Func         *FuncDecl     `parser:"| @@"`
-	Newline      *Newline      `parser:"| @@"`
-	CommentGroup *CommentGroup `parser:"| @@ )"`
+	Pos              lexer.Position
+	Import           *ImportDecl           `parser:"( @@"`
+	Export           *ExportDecl           `parser:"| @@"`
+	Func             *FuncDecl             `parser:"| @@"`
+	Newline          *Newline              `parser:"| @@"`
+	CommentGroup     *CommentGroup         `parser:"| @@ )"`
 }
 
 type ImportDecl struct {
@@ -253,12 +264,14 @@ type FuncLit struct {
 }
 
 type BasicLit struct {
-	Pos     lexer.Position
-	Decimal *int        `parser:"( @Decimal"`
-	Numeric *NumericLit `parser:"| @Numeric"`
-	Bool    *bool       `parser:"| @Bool"`
-	String  *StringLit  `parser:"| @@"`
-	Heredoc *Heredoc    `parser:"| @@ )"`
+	Pos        lexer.Position
+	Decimal    *int          `parser:"( @Decimal"`
+	Numeric    *NumericLit   `parser:"| @Numeric"`
+	Bool       *bool         `parser:"| @Bool"`
+	String     *StringLit    `parser:"| @@"`
+	RawString  *RawStringLit `parser:"| @@"`
+	Heredoc    *Heredoc      `parser:"| @@"`
+	RawHeredoc *RawHeredoc   `parser:"| @@ )"`
 }
 
 type NumericLit struct {
@@ -311,7 +324,19 @@ type Interpolated struct {
 	Pos       lexer.Position
 	Start     string `parser:"@Interpolated"`
 	Expr      *Expr  `parser:"@@?"`
-	Terminate string `parser:"@InterpolatedEnd"`
+	Terminate string `parser:"@BlockEnd"`
+}
+
+type RawStringLit struct {
+	Pos       lexer.Position
+	Start     *Backtick `parser:"@@"`
+	Text      string    `parser:"@RawChar"`
+	Terminate *Backtick `parser:"@@"`
+}
+
+type Backtick struct {
+	Pos  lexer.Position
+	Text string `parser:"@(RawString | RawStringEnd)"`
 }
 
 type Heredoc struct {
@@ -325,12 +350,19 @@ type HeredocFragment struct {
 	Pos          lexer.Position
 	Whitespace   *string       `parser:"( @Whitespace"`
 	Interpolated *Interpolated `parser:"| @@"`
-	Text         *string       `parser:"| @Text )"`
+	Text         *string       `parser:"| @(Text | RawText) )"`
 }
 
 type HeredocEnd struct {
 	Pos lexer.Position
-	EOF string `parser:"@HeredocEnd"`
+	EOF string `parser:"@(HeredocEnd | RawHeredocEnd)"`
+}
+
+type RawHeredoc struct {
+	Pos       lexer.Position
+	Start     string             `parser:"@RawHeredoc"`
+	Body      []*HeredocFragment `parser:"@@*"`
+	Terminate *HeredocEnd        `parser:"@@"`
 }
 
 type CallExpr struct {
@@ -342,7 +374,7 @@ type CallExpr struct {
 type ExprList struct {
 	Pos        lexer.Position
 	OpenParen  *OpenParen   `parser:"@@"`
-	Fields     []*ExprField `parser:"( Newline? @@ ( Delimit Newline?  @@ )* ( Delimit Newline )? )?"`
+	Fields     []*ExprField `parser:"@@*"`
 	CloseParen *CloseParen  `parser:"@@"`
 }
 
@@ -389,16 +421,14 @@ func main() {
 
 func run() error {
 	mod := &Module{}
-	err := Parser.ParseString(`
-		fs foo_bar(string foo, string gitVersion) {
-			copy image(<<~REF
-			           dockerregistry:7002/engtools/newt@sha256:${dgst}
-			REF) "/" "/" as (
-				dgst myDigest
-			)
-		}
 
-	`, mod)
+	f, err := os.Open("./build.hlb")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	err = Parser.Parse(f, mod)
 	repr.Println(mod)
 	return err
 }

@@ -1,0 +1,33 @@
+import "./go.hlb" as go
+import image("openllb/go.hlb") as go
+import fs {
+	image "openllb/go.hlb"
+} as go
+
+# Func docstring
+fs foo_bar(
+	# Param docstring
+	fs input,
+	string foo,
+) {
+	image "alpine:${dgst}" with option { resolve }
+	image `
+		alpine`
+	image <<-REF
+		alpine:${dgst}
+	REF
+	image <<-`REF`
+		alpine:${dgst}
+	REF
+	run "echo" with option {
+		dir "/src"
+		common "dst"
+        	mount scratch "/" "${dst}" as (
+			target output,
+		)
+	}
+}
+
+option::run common(string value) {
+	env "key" "${value}"
+}
