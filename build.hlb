@@ -1,5 +1,55 @@
-func foo() fs {
-	if apple == "hello" {
-		image(apple)
+import go from {
+	image("openllb/go.hlb")
+}
+
+func node() fs {
+	image("node:alpine")
+}
+
+# Documenting the `run` function signature with variadic signature
+func run(string... args) fs
+
+export func nodeModules() fs {
+	# Optional parens for no argument functions
+	node
+	run("npm install") with { # array decl can infer type as `[]option::run`
+		dir("/in")
+		mount(src, "/in") with readonly # single expression allowed as single element array.
+		mount(scratch, "/in/node_modules") as return # binding to special return register
+	}
+}
+
+func publishDigest() string {
+	# nodeModules is of `fs` type but it's okay as long as the final type of the
+	# register matches `string`.
+	nodeModules
+	# Accessing effects via '@' operator
+	dockerPush("hinshun/node_modules")@digest
+}
+
+func props() fs {
+	# Non-decimal integers and Heredoc support
+	mkfile "node_modules.props" 0o644 <<~EOF
+		digest=${publishDigest}
+	EOF
+}
+
+func regions() []string {
+	"us-east-1"
+	"us-west-2"
+}
+
+func publishAll() fs {
+	# Splat arrays to fulfill variadic function signature
+	publishAllRegions(regions...)
+}
+
+# Local scope `regions` mask global scope `regions` function
+func publishAllRegions(string... regions) fs {
+	nodeModules
+	for region in regions {
+		if region != "us-east-1" {
+			dockerPush("${region}/hinshun/node_modules")
+		}
 	}
 }

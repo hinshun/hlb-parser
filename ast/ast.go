@@ -23,7 +23,7 @@ var (
 			{"Block", `{`, lexer.Push("Block")},
 			{"Paren", `\(`, lexer.Push("Paren")},
 			{"Ident", `\b([[:alpha:]_]\w*)\b`, nil},
-			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+*/<>%^!|&])`, nil},
+			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+*/%^!|&])`, nil},
 			{"Punct", `[][@:;?.,]`, nil},
 			{"Newline", `\n`, nil},
 			{"Comment", `#[^\n]*\n`, nil},
@@ -93,7 +93,6 @@ type Comment struct {
 
 type Decl struct {
 	Import   *ImportDecl `parser:"( @@"`
-	Export   *ExportDecl `parser:"| @@"`
 	Func     *FuncDecl   `parser:"| @@"`
 	Newline  *Newline    `parser:"| @@"`
 	Comments *Comments   `parser:"| @@ )"`
@@ -114,22 +113,22 @@ type From struct {
 	Text string `parser:"@'from'"`
 }
 
-type ExportDecl struct {
-	Export *Export `parser:"@@"`
-	Name   *Ident  `parser:"@@"`
+type FuncDecl struct {
+	Modifiers []*Modifier `parser:"@@*"`
+	Func      *Func       `parser:"@@"`
+	Name      *Ident      `parser:"@@"`
+	Params    *FieldList  `parser:"@@"`
+	Type      *Type       `parser:"@@"`
+	Effects   *FieldList  `parser:"@@?"`
+	Body      *StmtList   `parser:"@@?"`
+}
+
+type Modifier struct {
+	Export *Export `@@`
 }
 
 type Export struct {
 	Text string `parser:"@'export'"`
-}
-
-type FuncDecl struct {
-	Func    *Func      `parser:"@@"`
-	Name    *Ident     `parser:"@@"`
-	Params  *FieldList `parser:"@@"`
-	Type    *Type      `parser:"@@"`
-	Effects *FieldList `parser:"@@?"`
-	Body    *StmtList  `parser:"@@"`
 }
 
 type Func struct {
@@ -517,7 +516,7 @@ func (l *NumericLit) Capture(tokens []string) error {
 type StringLit struct {
 	Start     *Quote            `parser:"@@"`
 	Fragments []*StringFragment `parser:"@@*"`
-	Terminate *Quote            `parser:"@@"`
+	End       *Quote            `parser:"@@"`
 }
 
 type Quote struct {
@@ -530,16 +529,10 @@ type StringFragment struct {
 	Text         *string       `parser:"| @Char )"`
 }
 
-type Interpolated struct {
-	Start     string `parser:"@Interpolated"`
-	Expr      *Expr  `parser:"@@?"`
-	Terminate string `parser:"@BlockEnd"`
-}
-
 type RawStringLit struct {
-	Start     *Backtick `parser:"@@"`
-	Text      string    `parser:"@RawChar"`
-	Terminate *Backtick `parser:"@@"`
+	Start *Backtick `parser:"@@"`
+	Text  string    `parser:"@RawChar"`
+	End   *Backtick `parser:"@@"`
 }
 
 type Backtick struct {
@@ -547,27 +540,38 @@ type Backtick struct {
 }
 
 type Heredoc struct {
+	Value     string
 	Start     string             `parser:"@Heredoc"`
-	Body      []*HeredocFragment `parser:"@@*"`
-	Terminate *HeredocEnd        `parser:"@@"`
+	Fragments []*HeredocFragment `parser:"@@*"`
+	End       *HeredocEnd        `parser:"@@"`
 }
 
 type HeredocFragment struct {
-	Whitespace   *string       `parser:"( @Whitespace"`
+	Spaces       *string       `parser:"( @Spaces"`
+	Escaped      *string       `parser:"| @Escaped"`
 	Interpolated *Interpolated `parser:"| @@"`
 	Text         *string       `parser:"| @(Text | RawText) )"`
 }
 
 type HeredocEnd struct {
-	EOF string `parser:"@(HeredocEnd | RawHeredocEnd)"`
+	Text string `parser:"@(HeredocEnd | RawHeredocEnd)"`
 }
 
 type RawHeredoc struct {
 	Start     string             `parser:"@RawHeredoc"`
-	Body      []*HeredocFragment `parser:"@@*"`
-	Terminate *HeredocEnd        `parser:"@@"`
+	Fragments []*HeredocFragment `parser:"@@*"`
+	End       *HeredocEnd        `parser:"@@"`
 }
 
+type Interpolated struct {
+	Start *OpenInterpolated `parser:"@@"`
+	Expr  *Expr             `parser:"@@?"`
+	End   *CloseBrace       `parser:"@@"`
+}
+
+type OpenInterpolated struct {
+	Text string `parser:"@Interpolated"`
+}
 type Type struct {
 	Scalar      *Ident       `parser:"( @@"`
 	Array       *Ident       `parser:"| '[' ']' @@ )"`
