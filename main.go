@@ -5,74 +5,71 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/alecthomas/participle"
-	"github.com/alecthomas/participle/lexer"
-	"github.com/alecthomas/participle/lexer/stateful"
+	participle "github.com/alecthomas/participle/v2"
+	"github.com/alecthomas/participle/v2/lexer"
 	"github.com/alecthomas/repr"
 )
 
 var (
-	Lexer = lexer.Must(stateful.New(stateful.Rules{
+	Lexer = lexer.MustStateful(lexer.Rules{
 		"Root": {
-			{"Keyword", `\b(import|export|with|as)\b`, nil},
+			{"Keyword", `\b(if|else|for|in|with|as|import|export)\b`, nil},
 			{"Numeric", `\b(0(b|B|o|O|x|X)[a-fA-F0-9]+)\b`, nil},
 			{"Decimal", `\b(0|[1-9][0-9]*)\b`, nil},
 			{"Bool", `\b(true|false)\b`, nil},
-			{"String", `"`, stateful.Push("String")},
-			{"RawString", "`", stateful.Push("RawString")},
-			{"Heredoc", `<<[-~]?(\w+)`, stateful.Push("Heredoc")},
-			{"RawHeredoc", "<<[-~]?`(\\w+)`", stateful.Push("RawHeredoc")},
-			{"Block", `{`, stateful.Push("Block")},
-			{"Paren", `\(`, stateful.Push("Paren")},
-			stateful.Include("Common"),
-		},
-		"Common": {
-			{"Ident", `[\w:]+`, stateful.Push("Reference")},
-			{"Operator", `;`, nil},
+			{"String", `"`, lexer.Push("String")},
+			{"RawString", "`", lexer.Push("RawString")},
+			{"Heredoc", `<<[-~]?(\w+)`, lexer.Push("Heredoc")},
+			{"RawHeredoc", "<<[-~]?`(\\w+)`", lexer.Push("RawHeredoc")},
+			{"Block", `{`, lexer.Push("Block")},
+			{"Paren", `\(`, lexer.Push("Paren")},
+			{"Ident", `[\w:]+`, lexer.Push("Reference")},
+			{"Condition", `>=|<=|&&|\|\||==|!=`, nil},
+			{"Operator", `[-+*/<>%^!|&]`, nil},
+			{"Punct", `[][@:;.,?]`, nil},
 			{"Newline", `\n`, nil},
 			{"Comment", `#[^\n]*\n`, nil},
 			{"whitespace", `[\r\t ]+`, nil},
 		},
 		"Reference": {
-			{"Dot", `\.`, nil},
 			{"Ident", `[\w:]+`, nil},
-			{"pop", ``, stateful.PopIfEmpty()},
+			lexer.Return(),
 		},
 		"String": {
-			{"StringEnd", `"`, stateful.Pop()},
+			{"StringEnd", `"`, lexer.Pop()},
 			{"Escaped", `\\.`, nil},
-			{"Interpolated", `\${`, stateful.Push("Interpolated")},
-			{"Char", `[^"$\\]+`, nil},
+			{"Interpolated", `\${`, lexer.Push("Interpolated")},
+			{"Char", `\$|[^"$\\]+`, nil},
 		},
 		"RawString": {
-			{"RawStringEnd", "`", stateful.Pop()},
+			{"RawStringEnd", "`", lexer.Pop()},
 			{"RawChar", "[^`]+", nil},
 		},
 		"Heredoc": {
-			{"HeredocEnd", `\b\1\b`, stateful.Pop()},
-			{"Whitespace", `\s+`, nil},
-			{"Interpolated", `\${`, stateful.Push("Interpolated")},
-			{"Text", `[^\s$]+`, nil},
+			{"HeredocEnd", `\b\1\b`, lexer.Pop()},
+			{"Spaces", `\s+`, nil},
+			{"Escaped", `\\.`, nil},
+			{"Interpolated", `\${`, lexer.Push("Interpolated")},
+			{"Text", `\$|[^\s$]+`, nil},
 		},
 		"RawHeredoc": {
-			{"RawHeredocEnd", `\b\1\b`, stateful.Pop()},
+			{"RawHeredocEnd", `\b\1\b`, lexer.Pop()},
 			{"Whitespace", `\s+`, nil},
 			{"RawText", `[^\s]+`, nil},
 		},
 		"Interpolated": {
-			{"BlockEnd", `}`, stateful.Pop()},
-			stateful.Include("Root"),
+			{"BlockEnd", `}`, lexer.Pop()},
+			lexer.Include("Root"),
 		},
 		"Block": {
-			{"BlockEnd", `}`, stateful.Pop()},
-			stateful.Include("Root"),
+			{"BlockEnd", `}`, lexer.Pop()},
+			lexer.Include("Root"),
 		},
 		"Paren": {
-			{"ParenEnd", `\)`, stateful.Pop()},
-			{"Delimit", `,`, nil},
-			stateful.Include("Root"),
+			{"ParenEnd", `\)`, lexer.Pop()},
+			lexer.Include("Root"),
 		},
-	}))
+	})
 
 	Parser = participle.MustBuild(
 		&Module{},
@@ -81,201 +78,229 @@ var (
 )
 
 type Module struct {
-	Pos   lexer.Position
+	Comments *Comments `parser:"@@?"`
+
 	Decls []*Decl `parser:"@@*"`
 }
 
+type Comments struct {
+	Comments []*Comment `parser:"@@+"`
+}
+
+type Comment struct {
+	Text string `parser:"@Comment"`
+}
+
 type Decl struct {
-	Pos              lexer.Position
-	Import           *ImportDecl           `parser:"( @@"`
-	Export           *ExportDecl           `parser:"| @@"`
-	Func             *FuncDecl             `parser:"| @@"`
-	Newline          *Newline              `parser:"| @@"`
-	CommentGroup     *CommentGroup         `parser:"| @@ )"`
+	Import   *ImportDecl `parser:"( @@"`
+	Export   *ExportDecl `parser:"| @@"`
+	Func     *FuncDecl   `parser:"| @@"`
+	Newline  *Newline    `parser:"| @@"`
+	Comments *Comments   `parser:"| @@ )"`
 }
 
 type ImportDecl struct {
-	Pos    lexer.Position
 	Import *Import `parser:"@@"`
-	Expr   *Expr   `parser:"@@"`
-	As     *As     `parser:"@@"`
 	Name   *Ident  `parser:"@@"`
+	From   *From   `parser:"@@"`
+	Expr   *Expr   `parser:"@@"`
 }
 
 type Import struct {
-	Pos  lexer.Position
 	Text string `parser:"@'import'"`
 }
 
+type From struct {
+	Text string `parser:"@'from'"`
+}
+
 type ExportDecl struct {
-	Pos    lexer.Position
 	Export *Export `parser:"@@"`
 	Name   *Ident  `parser:"@@"`
 }
 
 type Export struct {
-	Pos  lexer.Position
 	Text string `parser:"@'export'"`
 }
 
 type FuncDecl struct {
-	Pos     lexer.Position
-	Type    *Ident         `parser:"@@"`
-	Name    *Ident         `parser:"@@"`
-	Params  *FieldList     `parser:"@@"`
-	Effects *EffectsClause `parser:"( @@ )?"`
-	Body    *BlockStmt     `parser:"@@"`
+	Func    *Func      `parser:"@@"`
+	Name    *Ident     `parser:"@@"`
+	Params  *FieldList `parser:"@@"`
+	Type    *Type      `parser:"@@"`
+	Effects *FieldList `parser:"@@?"`
+	Body    *StmtList  `parser:"@@"`
 }
 
-type EffectsClause struct {
-	Pos     lexer.Position
-	Binds   *Binds     `parser:"@@"`
-	Effects *FieldList `parser:"@@"`
-}
-
-type Binds struct {
-	Pos  lexer.Position
-	Text string `parser:"@'binds'"`
-}
-
-type BlockStmt struct {
-	Pos        lexer.Position
-	OpenBrace  *OpenBrace  `parser:"@@"`
-	Stmts      []*Stmt     `parser:"@@*"`
-	CloseBrace *CloseBrace `parser:"@@"`
-}
-
-type OpenBrace struct {
-	Pos  lexer.Position
-	Text string `parser:"@Block"`
-}
-
-type CloseBrace struct {
-	Pos  lexer.Position
-	Text string `parser:"@BlockEnd"`
+type Func struct {
+	Text string `parser:"@'func'"`
 }
 
 type FieldList struct {
-	Pos        lexer.Position
 	OpenParen  *OpenParen   `parser:"@@"`
 	Fields     []*FieldStmt `parser:"@@*"`
 	CloseParen *CloseParen  `parser:"@@"`
 }
 
 type FieldStmt struct {
-	Pos     lexer.Position
-	Field   *Field   `parser:"( @@ Delimit?"`
-	Newline *Newline `parser:"| @@"`
-	Comment *Comment `parser:"| @@ )"`
+	Field    *Field    `parser:"( @@ ','?"`
+	Newline  *Newline  `parser:"| @@"`
+	Comments *Comments `parser:"| @@ )"`
 }
 
 type Field struct {
-	Pos      lexer.Position
-	Modifier *Modifier `parser:"@@?"`
-	Type     *Ident    `parser:"@@"`
-	Name     *Ident    `parser:"@@"`
+	Type     *Type   `parser:"@@"`
+	Variadic *string `parser:"@( '.' '.' '.' )?"`
+	Name     *Ident  `parser:"@@"`
 }
 
-type Modifier struct {
-	Pos      lexer.Position
-	Variadic *Variadic `parser:"@@"`
+type StmtList struct {
+	OpenBrace  *OpenBrace  `parser:"@@"`
+	Stmts      []*Stmt     `parser:"@@*"`
+	CloseBrace *CloseBrace `parser:"@@"`
 }
 
-type Variadic struct {
-	Pos  lexer.Position
-	Text string `parser:"@'variadic'"`
+type OpenBrace struct {
+	Text string `parser:"@Block"`
+}
+
+type CloseBrace struct {
+	Text string `parser:"@BlockEnd"`
 }
 
 type OpenParen struct {
-	Pos  lexer.Position
 	Text string `parser:"@Paren"`
 }
 
 type CloseParen struct {
-	Pos  lexer.Position
 	Text string `parser:"@ParenEnd"`
 }
 
 type Stmt struct {
-	Call    *CallStmt `parser:"( @@"`
-	Expr    *ExprStmt `parser:"| @@"`
-	Newline *Newline  `parser:"| @@"`
-	Comment *Comment  `parser:"| @@ )"`
+	If       *IfStmt   `parser:"( @@"`
+	For      *ForStmt  `parser:"| @@"`
+	Expr     *Expr     `parser:"| @@"`
+	Newline  *Newline  `parser:"| @@"`
+	Comments *Comments `parser:"| @@ )"`
 }
 
-type CallStmt struct {
-	Pos        lexer.Position
-	Name       *IdentExpr  `parser:"@@"`
-	Args       []*Expr     `parser:"@@*"`
-	WithClause *WithClause `parser:"@@?"`
-	Binds      *BindClause `parser:"@@?"`
-	StmtEnd    *StmtEnd    `parser:"@@?"`
+type IfStmt struct {
+	If        *If           `parser:"@@"`
+	Condition *Expr         `parser:"@@"`
+	Body      *StmtList     `parser:"@@"`
+	ElseIfs   []*ElseIfStmt `parser:"@@*"`
+	Else      *ElseStmt     `parser:"@@?"`
+}
+
+type ElseIfStmt struct {
+	Else      *Else     `parser:"@@"`
+	If        *If       `parser:"@@"`
+	Condition *Expr     `parser:"@@"`
+	Body      *StmtList `parser:"@@"`
+}
+
+type ElseStmt struct {
+	Else *Else     `parser:"@@"`
+	Body *StmtList `parser:"@@"`
+}
+
+type If struct {
+	Text string `parser:"@'if'"`
+}
+
+type Else struct {
+	Text string `parser:"@'else'"`
+}
+
+type ForStmt struct {
+	For      *For      `parser:"@@"`
+	Counter  *Ident    `parser:"( @@ ',' )?"`
+	Var      *Ident    `parser:"@@"`
+	In       *In       `parser:"@@"`
+	Iterable *Expr     `parser:"@@"`
+	Body     *StmtList `parser:"@@"`
+}
+
+type For struct {
+	Text string `parser:"@'for'"`
+}
+
+type In struct {
+	Text string `parser:"@'in'"`
+}
+
+type Expr struct {
+	Block      *StmtList     `parser:"( @@"`
+	Decimal    *int          `parser:"| @Decimal"`
+	Numeric    *NumericLit   `parser:"| @Numeric"`
+	Bool       *bool         `parser:"| @Bool"`
+	String     *StringLit    `parser:"| @@"`
+	RawString  *RawStringLit `parser:"| @@"`
+	Heredoc    *Heredoc      `parser:"| @@"`
+	RawHeredoc *RawHeredoc   `parser:"| @@"`
+	Call       *CallExpr     `parser:"| @@ )"`
+	Splat      *string       `parser:"@('.' '.' '.')?"`
+}
+
+type CallExpr struct {
+	Func *IdentExpr  `parser:"@@"`
+	Args *ExprList   `parser:"@@?"`
+	At   *AtClause   `parser:"@@?"`
+	With *WithClause `parser:"@@?"`
+	As   *AsClause   `parser:"@@?"`
+}
+
+type IdentExpr struct {
+	Name      *Ident     `parser:"@@"`
+	Reference *Reference `parser:"@@?"`
+}
+
+type Reference struct {
+	Dot   string `parser:"@'.'"`
+	Field *Ident `parser:"@@"`
+}
+
+type ExprList struct {
+	OpenParen  *OpenParen  `parser:"@@"`
+	Exprs      []*ExprStmt `parser:"@@*"`
+	CloseParen *CloseParen `parser:"@@"`
+}
+
+type ExprStmt struct {
+	Expr     *Expr     `parser:"( @@ ','?"`
+	Newline  *Newline  `parser:"| @@"`
+	Comments *Comments `parser:"| @@ )"`
+}
+
+type AtClause struct {
+	At     *At    `parser:"@@"`
+	Effect *Ident `parser:"@@"`
+}
+
+type At struct {
+	Text string `parser:"@'@'"`
 }
 
 type WithClause struct {
-	Pos     lexer.Position
 	With    *With `parser:"@@"`
 	Expr    *Expr `parser:"@@"`
 	Closure *FuncDecl
 }
 
 type With struct {
-	Pos  lexer.Position
 	Text string `parser:"@'with'"`
 }
 
-type BindClause struct {
-	Pos   lexer.Position
-	As    *As        `parser:"@@"`
-	Ident *Ident     `parser:"( @@"`
-	Binds *FieldList `parser:"| @@ )"`
+type AsClause struct {
+	As     *As    `parser:"@@"`
+	Effect *Ident `parser:"@@"`
 }
 
 type As struct {
-	Pos  lexer.Position
 	Text string `parser:"@'as'"`
 }
 
-type ExprStmt struct {
-	Pos     lexer.Position
-	Expr    *Expr    `parser:"@@"`
-	StmtEnd *StmtEnd `parser:"@@?"`
-}
-
-type StmtEnd struct {
-	Pos       lexer.Position
-	Semicolon *string  `parser:"( @';'"`
-	Newline   *Newline `parser:"| @@"`
-	Comment   *Comment `parser:"| @@ )"`
-}
-
-type Expr struct {
-	Pos       lexer.Position
-	FuncLit   *FuncLit   `parser:"( @@"`
-	BasicLit  *BasicLit  `parser:"| @@"`
-	CallExpr  *CallExpr  `parser:"| @@"`
-	IdentExpr *IdentExpr `parser:"| @@ )"`
-}
-
-type FuncLit struct {
-	Pos  lexer.Position
-	Type *Ident     `parser:"@@"`
-	Body *BlockStmt `parser:"@@"`
-}
-
-type BasicLit struct {
-	Pos        lexer.Position
-	Decimal    *int          `parser:"( @Decimal"`
-	Numeric    *NumericLit   `parser:"| @Numeric"`
-	Bool       *bool         `parser:"| @Bool"`
-	String     *StringLit    `parser:"| @@"`
-	RawString  *RawStringLit `parser:"| @@"`
-	Heredoc    *Heredoc      `parser:"| @@"`
-	RawHeredoc *RawHeredoc   `parser:"| @@ )"`
-}
-
 type NumericLit struct {
-	Pos   lexer.Position
 	Value int64
 	Base  int
 }
@@ -302,113 +327,70 @@ func (l *NumericLit) Capture(tokens []string) error {
 }
 
 type StringLit struct {
-	Pos       lexer.Position
 	Start     *Quote            `parser:"@@"`
 	Fragments []*StringFragment `parser:"@@*"`
 	Terminate *Quote            `parser:"@@"`
 }
 
 type Quote struct {
-	Pos  lexer.Position
 	Text string `parser:"@(String | StringEnd)"`
 }
 
 type StringFragment struct {
-	Pos          lexer.Position
 	Escaped      *string       `parser:"( @Escaped"`
 	Interpolated *Interpolated `parser:"| @@"`
 	Text         *string       `parser:"| @Char )"`
 }
 
 type Interpolated struct {
-	Pos       lexer.Position
 	Start     string `parser:"@Interpolated"`
 	Expr      *Expr  `parser:"@@?"`
 	Terminate string `parser:"@BlockEnd"`
 }
 
 type RawStringLit struct {
-	Pos       lexer.Position
 	Start     *Backtick `parser:"@@"`
 	Text      string    `parser:"@RawChar"`
 	Terminate *Backtick `parser:"@@"`
 }
 
 type Backtick struct {
-	Pos  lexer.Position
 	Text string `parser:"@(RawString | RawStringEnd)"`
 }
 
 type Heredoc struct {
-	Pos       lexer.Position
 	Start     string             `parser:"@Heredoc"`
 	Body      []*HeredocFragment `parser:"@@*"`
 	Terminate *HeredocEnd        `parser:"@@"`
 }
 
 type HeredocFragment struct {
-	Pos          lexer.Position
 	Whitespace   *string       `parser:"( @Whitespace"`
 	Interpolated *Interpolated `parser:"| @@"`
 	Text         *string       `parser:"| @(Text | RawText) )"`
 }
 
 type HeredocEnd struct {
-	Pos lexer.Position
 	EOF string `parser:"@(HeredocEnd | RawHeredocEnd)"`
 }
 
 type RawHeredoc struct {
-	Pos       lexer.Position
 	Start     string             `parser:"@RawHeredoc"`
 	Body      []*HeredocFragment `parser:"@@*"`
 	Terminate *HeredocEnd        `parser:"@@"`
 }
 
-type CallExpr struct {
-	Pos  lexer.Position
-	Name *Ident    `parser:"@@"`
-	Args *ExprList `parser:"@@"`
-}
-
-type ExprList struct {
-	Pos        lexer.Position
-	OpenParen  *OpenParen   `parser:"@@"`
-	Fields     []*ExprField `parser:"@@*"`
-	CloseParen *CloseParen  `parser:"@@"`
-}
-
-type ExprField struct {
-	Pos     lexer.Position
-	Expr    *Expr    `parser:"( @@ Delimit?"`
-	Newline *Newline `parser:"| @@"`
-	Comment *Comment `parser:"| @@ )"`
-}
-
-type IdentExpr struct {
-	Pos       lexer.Position
-	Ident     *Ident `parser:"@@"`
-	Reference *Ident `parser:"(Dot @@)?"`
+type Type struct {
+	Scalar *Ident `parser:"( @@"`
+	Array  *Ident `parser:"| '[' ']' @@ )"`
 }
 
 type Ident struct {
-	Pos  lexer.Position
 	Text string `parser:"@Ident"`
 }
 
 type Newline struct {
-	Pos  lexer.Position
 	Text string `parser:"@Newline"`
-}
-
-type CommentGroup struct {
-	Pos      lexer.Position
-	Comments []*Comment `parser:"@@+"`
-}
-
-type Comment struct {
-	Pos  lexer.Position
-	Text string `parser:"@Comment"`
 }
 
 func main() {
@@ -428,7 +410,8 @@ func run() error {
 	}
 	defer f.Close()
 
-	err = Parser.Parse(f, mod)
+	err = Parser.Parse(f.Name(), f, mod)
+	fmt.Println(mod)
 	repr.Println(mod)
 	return err
 }

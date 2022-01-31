@@ -1,0 +1,51 @@
+# package comment
+
+# foo comment
+func foo([]string img) fs {
+        # image comment
+        image(img)
+}
+
+func bar() fs {
+	foo([]string {
+		"hello"
+		"world"
+	}...)
+}
+
+func vari(string... msgs) fs {
+}
+
+func echo() fs {
+        image("alpine")
+        run("echo foo > /out/msg") with []option {
+                mount(scratch, "/out") as return
+        }
+}
+
+# Isolated comment
+# group
+
+# Comments
+# in a group
+func npm(fs src) fs (fs pkgLock, fs nodeModules) {
+	# isolated comment
+
+	# comment behind statement
+        image("node:alpine") # comment on line
+        run("npm install") with []option {
+                dir("/in") # comment on option
+                mount(src, "/in") as pkgLock
+		mount(scratch, "/in/node_modules")
+	}
+}
+# comment after func
+
+func src() fs {
+        local(".") with includePatterns("package.json", "package.lock")
+}
+
+func npmInstall() fs {
+	npm(src)@nodeModules
+	download("./node_modules")
+}
