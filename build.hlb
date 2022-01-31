@@ -1,5 +1,5 @@
 func foo() fs {
-	if apple {
+	if apple == "hello" {
 		image(apple)
 	}
 }

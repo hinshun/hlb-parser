@@ -7,7 +7,7 @@ func foo([]string img) fs {
 }
 
 func bar() fs {
-	foo([]string {
+	foo({
 		"hello"
 		"world"
 	}...)
@@ -18,7 +18,7 @@ func vari(string... msgs) fs {
 
 func echo() fs {
         image("alpine")
-        run("echo foo > /out/msg") with []option {
+        run("echo foo > /out/msg") with {
                 mount(scratch, "/out") as return
         }
 }
@@ -33,7 +33,7 @@ func npm(fs src) fs (fs pkgLock, fs nodeModules) {
 
 	# comment behind statement
         image("node:alpine") # comment on line
-        run("npm install") with []option {
+        run("npm install") with {
                 dir("/in") # comment on option
                 mount(src, "/in") as pkgLock
 		mount(scratch, "/in/node_modules")
