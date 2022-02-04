@@ -53,3 +53,10 @@ func publishAllRegions(string... regions) fs {
 		}
 	}
 }
+
+func publishEurope() fs {
+	publishAllRegions([]string{
+		"eu-west-1"
+		"eu-west-2"
+	})
+}

@@ -430,7 +430,8 @@ type Selector struct {
 }
 
 type Literal struct {
-	Block      *StmtList     `parser:"( @@"`
+	ArrayLit   *ArrayLit     `parser:"( @@"`
+	Block      *StmtList     `parser:"| @@"`
 	Decimal    *int          `parser:"| @Decimal"`
 	Numeric    *NumericLit   `parser:"| @Numeric"`
 	Bool       *bool         `parser:"| @Bool"`
@@ -438,6 +439,11 @@ type Literal struct {
 	RawString  *RawStringLit `parser:"| @@"`
 	Heredoc    *Heredoc      `parser:"| @@"`
 	RawHeredoc *RawHeredoc   `parser:"| @@ )"`
+}
+
+type ArrayLit struct {
+	Type  *Ident    `parser:"'[' ']' @@"`
+	Block *StmtList `parser:"@@"`
 }
 
 type Call struct {
@@ -572,6 +578,7 @@ type Interpolated struct {
 type OpenInterpolated struct {
 	Text string `parser:"@Interpolated"`
 }
+
 type Type struct {
 	Scalar      *Ident       `parser:"( @@"`
 	Array       *Ident       `parser:"| '[' ']' @@ )"`
