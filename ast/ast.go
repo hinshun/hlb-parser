@@ -20,13 +20,14 @@ var (
 			{"RawString", "`", lexer.Push("RawString")},
 			{"Heredoc", `<<[-~]?(\w+)`, lexer.Push("Heredoc")},
 			{"RawHeredoc", "<<[-~]?`(\\w+)`", lexer.Push("RawHeredoc")},
-			{"Block", `{`, lexer.Push("Block")},
+			{"Brace", `{`, lexer.Push("Brace")},
 			{"Paren", `\(`, lexer.Push("Paren")},
 			{"Ident", `\b([[:alpha:]_]\w*)\b`, nil},
 			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+*/%^!|&])`, nil},
-			{"Punct", `[][@:;?.,]`, nil},
+			{"Punct", `[][@:?.,]`, nil},
+			{"Semicolon", `;`, nil},
 			{"Newline", `\n`, nil},
-			{"Comment", `#[^\n]*\n`, nil},
+			{"Comment", `#`, lexer.Push("Comment")},
 		},
 		"String": {
 			{"StringEnd", `"`, lexer.Pop()},
@@ -51,22 +52,26 @@ var (
 			{"RawText", `[^\s]+`, nil},
 		},
 		"Interpolated": {
-			{"BlockEnd", `}`, lexer.Pop()},
+			{"BraceEnd", `}`, lexer.Pop()},
 			lexer.Include("Root"),
 		},
-		"Block": {
-			{"BlockEnd", `}`, lexer.Pop()},
+		"Brace": {
+			{"BraceEnd", `}`, lexer.Pop()},
 			lexer.Include("Root"),
 		},
 		"Paren": {
 			{"ParenEnd", `\)`, lexer.Pop()},
 			lexer.Include("Root"),
 		},
+		"Comment": {
+			{"CommentEnd", `\n`, lexer.Pop()},
+			{"CommentText", `[^\n]`, nil},
+		},
 	})
 
 	Parser = participle.MustBuild(
 		&Module{},
-		participle.Lexer(Lexer),
+		participle.Lexer(&semicolonLexerDefinition{}),
 	)
 )
 
@@ -81,12 +86,12 @@ type Comments struct {
 }
 
 type Comment struct {
-	Text string `parser:"@Comment"`
+	Text string `parser:"Comment @(CommentText*) CommentEnd"`
 }
 
 type Decl struct {
-	Import   *ImportDecl `parser:"( @@"`
-	Func     *FuncDecl   `parser:"| @@"`
+	Import   *ImportDecl `parser:"( @@ (';' | (?= Comment))"`
+	Func     *FuncDecl   `parser:"| @@ (';' | (?= Comment))"`
 	Newline  *Newline    `parser:"| @@"`
 	Comments *Comments   `parser:"| @@ )"`
 }
@@ -153,11 +158,11 @@ type StmtList struct {
 }
 
 type OpenBrace struct {
-	Text string `parser:"@Block"`
+	Text string `parser:"@Brace"`
 }
 
 type CloseBrace struct {
-	Text string `parser:"@BlockEnd"`
+	Text string `parser:"@BraceEnd"`
 }
 
 type OpenParen struct {
@@ -177,9 +182,9 @@ type CloseBracket struct {
 }
 
 type Stmt struct {
-	If       *IfStmt   `parser:"( @@"`
-	For      *ForStmt  `parser:"| @@"`
-	Expr     *Expr     `parser:"| @@"`
+	If       *IfStmt   `parser:"( @@ (';' | (?= Comment))"`
+	For      *ForStmt  `parser:"| @@ (';' | (?= Comment))"`
+	Expr     *Expr     `parser:"| @@ (';' | (?= Comment))"`
 	Newline  *Newline  `parser:"| @@"`
 	Comments *Comments `parser:"| @@ )"`
 }

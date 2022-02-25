@@ -24,7 +24,7 @@ type Expr struct {
 	Right *Expr
 }
 
-// Parse expressions with a custom precedence climbing implementation.
+// Parse expressions with a precedence climbing implementation.
 func (e *Expr) Parse(lex *lexer.PeekingLexer) error {
 	ex, err := parseExpr(lex, 0)
 	if err != nil {
@@ -37,24 +37,22 @@ func (e *Expr) Parse(lex *lexer.PeekingLexer) error {
 type Op int
 
 const (
-	OpNone   Op = iota //
-	OpGe               // >=
-	OpLe               // <=
-	OpAnd              // &&
-	OpOr               // ||
-	OpEq               // ==
-	OpNe               // !=
-	OpSub              // -
-	OpAdd              // +
-	OpMul              // *
-	OpDiv              // /
-	OpLt               // <
-	OpGt               // >
-	OpMod              // %
-	OpPow              // ^
-	OpNot              // !
-	OpBitOr            // |
-	OpBitAnd           // &
+	OpNone Op = iota //
+	OpGe             // >=
+	OpLe             // <=
+	OpAnd            // &&
+	OpOr             // ||
+	OpEq             // ==
+	OpNe             // !=
+	OpSub            // -
+	OpAdd            // +
+	OpMul            // *
+	OpDiv            // /
+	OpLt             // <
+	OpGt             // >
+	OpMod            // %
+	OpPow            // ^
+	OpNot            // !
 )
 
 func (o *Op) Capture(values []string) error {
@@ -101,14 +99,12 @@ type opInfo struct {
 }
 
 var opTable = map[Op]opInfo{
-	OpAdd:    {Priority: 1},
-	OpSub:    {Priority: 1},
-	OpMul:    {Priority: 2},
-	OpDiv:    {Priority: 2},
-	OpMod:    {Priority: 2},
-	OpPow:    {RightAssociative: true, Priority: 3},
-	OpBitOr:  {Priority: 4},
-	OpBitAnd: {Priority: 4},
+	OpAdd: {Priority: 1},
+	OpSub: {Priority: 1},
+	OpMul: {Priority: 2},
+	OpDiv: {Priority: 2},
+	OpMod: {Priority: 2},
+	OpPow: {RightAssociative: true, Priority: 3},
 }
 
 // Precedence climbing implementation based on
@@ -157,8 +153,6 @@ func parseExpr(lex *lexer.PeekingLexer, minPrec int) (*Expr, error) {
 }
 
 func parseOperand(lex *lexer.PeekingLexer) (*Expr, error) {
-	// tok, _ := lex.Peek(0)
-
 	u := &Unary{}
 	err := unaryParser.ParseFromLexer(lex, u, participle.AllowTrailing(true))
 	if err != nil {
