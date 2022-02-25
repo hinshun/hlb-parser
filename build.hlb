@@ -2,14 +2,14 @@ import go from {
 	image("openllb/go.hlb")
 }
 
-func node() fs {
+fun node() fs {
 	image("node:alpine")
 }
 
 # Documenting the `run` function signature with variadic signature
-func run(string... args) fs
+fun run(string... args) fs
 
-export func nodeModules() fs {
+pub fun nodeModules() fs {
 	# Optional parens for no argument functions
 	node
 	run("npm install") with { # array decl can infer type as `[]option::run`
@@ -19,7 +19,7 @@ export func nodeModules() fs {
 	}
 }
 
-func publishDigest() string {
+fun publishDigest() string {
 	# nodeModules is of `fs` type but it's okay as long as the final type of the
 	# register matches `string`.
 	nodeModules
@@ -27,25 +27,25 @@ func publishDigest() string {
 	dockerPush("hinshun/node_modules")@digest
 }
 
-func props() fs {
+fun props() fs {
 	# Non-decimal integers and Heredoc support
 	mkfile "node_modules.props" 0o644 <<~EOF
 		digest=${publishDigest}
 	EOF
 }
 
-func regions() []string {
+fun regions() []string {
 	"us-east-1"
 	"us-west-2"
 }
 
-func publishAll() fs {
+fun publishAll() fs {
 	# Splat arrays to fulfill variadic function signature
 	publishAllRegions(regions...)
 }
 
 # Local scope `regions` mask global scope `regions` function
-func publishAllRegions(string... regions) fs {
+fun publishAllRegions(string... regions) fs {
 	nodeModules
 	for region in regions {
 		if region != "us-east-1" {
@@ -54,7 +54,7 @@ func publishAllRegions(string... regions) fs {
 	}
 }
 
-func publishEurope() fs {
+fun publishEurope() fs {
 	publishAllRegions([]string{
 		"eu-west-1"
 		"eu-west-2"

@@ -12,7 +12,8 @@ var (
 	Lexer = lexer.MustStateful(lexer.Rules{
 		"Root": {
 			{"whitespace", `[\r\t ]+`, nil},
-			{"Keyword", `\b(if|else|for|in|with|as|import|export)\b`, nil},
+			{"Modifier", `\b(pub)\b`, nil},
+			{"Keyword", `\b(if|else|for|in|with|as|import|fun)\b`, nil},
 			{"Numeric", `\b(0(b|B|o|O|x|X)[a-fA-F0-9]+)\b`, nil},
 			{"Decimal", `\b(0|[1-9][0-9]*)\b`, nil},
 			{"Bool", `\b(true|false)\b`, nil},
@@ -124,15 +125,15 @@ type FuncDecl struct {
 }
 
 type Modifier struct {
-	Export *Export `@@`
+	Public *Public `@@`
 }
 
-type Export struct {
-	Text string `parser:"@'export'"`
+type Public struct {
+	Text string `parser:"@'pub'"`
 }
 
 type Func struct {
-	Text string `parser:"@'func'"`
+	Text string `parser:"@'fun'"`
 }
 
 type FieldList struct {
@@ -309,10 +310,6 @@ func (o *Op) Capture(values []string) error {
 		*o = OpPow
 	case "!":
 		*o = OpNot
-	case "|":
-		*o = OpBitOr
-	case "&":
-		*o = OpBitAnd
 	default:
 		return fmt.Errorf("invalid expression operator %q", values[0])
 	}
