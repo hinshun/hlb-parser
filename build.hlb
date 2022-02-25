@@ -29,9 +29,9 @@ fun publishDigest() string {
 
 fun props() fs {
 	# Non-decimal integers and Heredoc support
-	mkfile "node_modules.props" 0o644 <<~EOF
+	mkfile("node_modules.props", 0o644, <<~EOF
 		digest=${publishDigest}
-	EOF
+	EOF)
 }
 
 fun regions() []string {

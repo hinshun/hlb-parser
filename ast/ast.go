@@ -81,17 +81,9 @@ type Module struct {
 	Decls []*Decl `parser:"@@*"`
 }
 
-type Comments struct {
-	Comments []*Comment `parser:"@@+"`
-}
-
-type Comment struct {
-	Text string `parser:"Comment @(CommentText*) CommentEnd"`
-}
-
 type Decl struct {
-	Import   *ImportDecl `parser:"( @@ (';' | (?= Comment))"`
-	Func     *FuncDecl   `parser:"| @@ (';' | (?= Comment))"`
+	Import   *ImportDecl `parser:"( @@ (?= ';' | Comment) ';'?"`
+	Func     *FuncDecl   `parser:"| @@ (?= ';' | Comment) ';'?"`
 	Newline  *Newline    `parser:"| @@"`
 	Comments *Comments   `parser:"| @@ )"`
 }
@@ -151,40 +143,27 @@ type Field struct {
 	Name     *Ident  `parser:"@@"`
 }
 
+type Type struct {
+	Scalar      *Ident       `parser:"( @@"`
+	Array       *Ident       `parser:"| '[' ']' @@ )"`
+	Association *Association `parser:"@@?"`
+}
+
+type Association struct {
+	Symbol string `parser:"@( ':' ':' )"`
+	Field  *Ident `parser:"@@"`
+}
+
 type StmtList struct {
 	OpenBrace  *OpenBrace  `parser:"@@"`
 	Stmts      []*Stmt     `parser:"@@*"`
 	CloseBrace *CloseBrace `parser:"@@"`
 }
 
-type OpenBrace struct {
-	Text string `parser:"@Brace"`
-}
-
-type CloseBrace struct {
-	Text string `parser:"@BraceEnd"`
-}
-
-type OpenParen struct {
-	Text string `parser:"@Paren"`
-}
-
-type CloseParen struct {
-	Text string `parser:"@ParenEnd"`
-}
-
-type OpenBracket struct {
-	Text string `parser:"@'['"`
-}
-
-type CloseBracket struct {
-	Text string `parser:"@']'"`
-}
-
 type Stmt struct {
-	If       *IfStmt   `parser:"( @@ (';' | (?= Comment))"`
-	For      *ForStmt  `parser:"| @@ (';' | (?= Comment))"`
-	Expr     *Expr     `parser:"| @@ (';' | (?= Comment))"`
+	If       *IfStmt   `parser:"( @@ (?= ';' | Comment) ';'?"`
+	For      *ForStmt  `parser:"| @@ (?= ';' | Comment) ';'?"`
+	Expr     *Expr     `parser:"| @@ (?= ';' | Comment) ';'?"`
 	Newline  *Newline  `parser:"| @@"`
 	Comments *Comments `parser:"| @@ )"`
 }
@@ -433,21 +412,42 @@ type OpenInterpolated struct {
 	Text string `parser:"@Interpolated"`
 }
 
-type Type struct {
-	Scalar      *Ident       `parser:"( @@"`
-	Array       *Ident       `parser:"| '[' ']' @@ )"`
-	Association *Association `parser:"@@?"`
-}
-
-type Association struct {
-	Symbol string `parser:"@( ':' ':' )"`
-	Field  *Ident `parser:"@@"`
-}
-
 type Ident struct {
 	Text string `parser:"@Ident"`
 }
 
 type Newline struct {
 	Text string `parser:"@Newline"`
+}
+
+type Comments struct {
+	Comments []*Comment `parser:"@@+"`
+}
+
+type Comment struct {
+	Text string `parser:"Comment @(CommentText*) CommentEnd"`
+}
+
+type OpenBrace struct {
+	Text string `parser:"@Brace"`
+}
+
+type CloseBrace struct {
+	Text string `parser:"@BraceEnd"`
+}
+
+type OpenParen struct {
+	Text string `parser:"@Paren"`
+}
+
+type CloseParen struct {
+	Text string `parser:"@ParenEnd"`
+}
+
+type OpenBracket struct {
+	Text string `parser:"@'['"`
+}
+
+type CloseBracket struct {
+	Text string `parser:"@']'"`
 }
