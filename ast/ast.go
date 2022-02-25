@@ -22,9 +22,10 @@ var (
 			{"RawHeredoc", "<<[-~]?`(\\w+)`", lexer.Push("RawHeredoc")},
 			{"Brace", `{`, lexer.Push("Brace")},
 			{"Paren", `\(`, lexer.Push("Paren")},
+			{"Bracket", `\[`, lexer.Push("Bracket")},
 			{"Ident", `\b([[:alpha:]_]\w*)\b`, nil},
-			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+*/%^!|&])`, nil},
-			{"Punct", `[][@:;?.,]`, nil},
+			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+=*/%^!|&])`, nil},
+			{"Punct", `[@:;?.,]`, nil},
 			{"Newline", `\n`, nil},
 			{"Comment", `#`, lexer.Push("Comment")},
 		},
@@ -62,6 +63,10 @@ var (
 			{"ParenEnd", `\)`, lexer.Pop()},
 			lexer.Include("Root"),
 		},
+		"Bracket": {
+			{"BracketEnd", `\]`, lexer.Pop()},
+			lexer.Include("Root"),
+		},
 		"Comment": {
 			{"CommentEnd", `\n`, lexer.Pop()},
 			{"CommentText", `[^\n]`, nil},
@@ -81,8 +86,8 @@ type Module struct {
 }
 
 type Decl struct {
-	Import   *ImportDecl `parser:"( @@ (?= ';' | Comment) ';'?"`
-	Func     *FuncDecl   `parser:"| @@ (?= ';' | Comment) ';'?"`
+	Import   *ImportDecl `parser:"( @@ ';'?"`
+	Func     *FuncDecl   `parser:"| @@ ';'?"`
 	Newline  *Newline    `parser:"| @@"`
 	Comments *Comments   `parser:"| @@ )"`
 }
@@ -137,14 +142,20 @@ type FieldStmt struct {
 }
 
 type Field struct {
-	Type     *Type   `parser:"@@"`
-	Variadic *string `parser:"@( '.' '.' '.' )?"`
-	Name     *Ident  `parser:"@@"`
+	Type     *Type         `parser:"@@"`
+	Variadic *string       `parser:"@( '.' '.' '.' )?"`
+	Name     *Ident        `parser:"@@"`
+	Default  *FieldDefault `parser:"@@?"`
+}
+
+type FieldDefault struct {
+	Assign string `parser:"@'='"`
+	Unary  *Unary `parser:"@@"`
 }
 
 type Type struct {
 	Scalar      *Ident       `parser:"( @@"`
-	Array       *Ident       `parser:"| '[' ']' @@ )"`
+	Array       *Type        `parser:"| '[' ']' @@ )"`
 	Association *Association `parser:"@@?"`
 }
 
@@ -160,9 +171,9 @@ type StmtList struct {
 }
 
 type Stmt struct {
-	If       *IfStmt   `parser:"( @@ (?= ';' | Comment) ';'?"`
-	For      *ForStmt  `parser:"| @@ (?= ';' | Comment) ';'?"`
-	Expr     *Expr     `parser:"| @@ (?= ';' | Comment) ';'?"`
+	If       *IfStmt   `parser:"( @@ ';'?"`
+	For      *ForStmt  `parser:"| @@ ';'?"`
+	Expr     *Expr     `parser:"| @@ ';'?"`
 	Newline  *Newline  `parser:"| @@"`
 	Comments *Comments `parser:"| @@ )"`
 }
@@ -240,10 +251,10 @@ type Terminal struct {
 }
 
 type RefNext struct {
-	Splat     *Splat     `parser:"( @@"`
-	Subscript *Subscript `parser:"| @@"`
+	Subscript *Subscript `parser:"( @@"`
 	Selector  *Selector  `parser:"| @@"`
-	Call      *Call      `parser:"| @@ )"`
+	Call      *Call      `parser:"| @@"`
+	Splat     *Splat     `parser:"| @@ )"`
 	Next      *RefNext   `@@?`
 }
 
@@ -253,7 +264,9 @@ type Splat struct {
 
 type Subscript struct {
 	OpenBracket  *OpenBracket  `parser:"@@"`
-	Expr         *Expr         `parser:"@@"`
+	LeftExpr     *Expr         `parser:"( @@?"`
+	Colon        *string       `parser:"@':'?"`
+	RightExpr    *Expr         `parser:"@@? )!"`
 	CloseBracket *CloseBracket `parser:"@@"`
 }
 
@@ -444,9 +457,9 @@ type CloseParen struct {
 }
 
 type OpenBracket struct {
-	Text string `parser:"@'['"`
+	Text string `parser:"@Bracket"`
 }
 
 type CloseBracket struct {
-	Text string `parser:"@']'"`
+	Text string `parser:"@BracketEnd"`
 }
