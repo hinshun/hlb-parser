@@ -194,17 +194,23 @@ type Stmt struct {
 
 type IfStmt struct {
 	If        *If           `parser:"@@"`
-	Condition *Expr         `parser:"@@"`
+	Condition *Condition    `parser:"@@"`
 	Body      *StmtList     `parser:"@@"`
 	ElseIfs   []*ElseIfStmt `parser:"@@*"`
 	Else      *ElseStmt     `parser:"@@?"`
 }
 
+type Condition struct {
+	OpenParen  *OpenParen  `parser:"@@"`
+	Expr       *Expr       `parser:"@@"`
+	CloseParen *CloseParen `parser:"@@"`
+}
+
 type ElseIfStmt struct {
-	Else      *Else     `parser:"@@"`
-	If        *If       `parser:"@@"`
-	Condition *Expr     `parser:"@@"`
-	Body      *StmtList `parser:"@@"`
+	Else      *Else      `parser:"@@"`
+	If        *If        `parser:"@@"`
+	Condition *Condition `parser:"@@"`
+	Body      *StmtList  `parser:"@@"`
 }
 
 type ElseStmt struct {
@@ -221,16 +227,22 @@ type Else struct {
 }
 
 type ForStmt struct {
-	For      *For      `parser:"@@"`
-	Counter  *Ident    `parser:"( @@ ',' )?"`
-	Var      *Ident    `parser:"@@"`
-	In       *In       `parser:"@@"`
-	Iterable *Expr     `parser:"@@"`
-	Body     *StmtList `parser:"@@"`
+	For    *For       `parser:"@@"`
+	Header *ForHeader `parser:"@@"`
+	Body   *StmtList  `parser:"@@"`
 }
 
 type For struct {
 	Text string `parser:"@'for'"`
+}
+
+type ForHeader struct {
+	OpenParen  *OpenParen  `parser:"@@"`
+	Counter    *Ident      `parser:"( @@ ',' )?"`
+	Var        *Ident      `parser:"@@"`
+	In         *In         `parser:"@@"`
+	Iterable   *Expr       `parser:"@@"`
+	CloseParen *CloseParen `parser:"@@"`
 }
 
 type In struct {
@@ -427,8 +439,7 @@ type Selector struct {
 }
 
 type Literal struct {
-	ArrayLit   *ArrayLit     `parser:"( @@"`
-	Block      *StmtList     `parser:"| @@"`
+	Block      *BlockLit     `parser:"( @@"`
 	Decimal    *int          `parser:"| @Decimal"`
 	Numeric    *NumericLit   `parser:"| @Numeric"`
 	Bool       *bool         `parser:"| @Bool"`
@@ -438,8 +449,8 @@ type Literal struct {
 	RawHeredoc *RawHeredoc   `parser:"| @@ )"`
 }
 
-type ArrayLit struct {
-	Type  *Ident    `parser:"'[' ']' @@"`
+type BlockLit struct {
+	Type  *Type     `parser:"@@?"`
 	Block *StmtList `parser:"@@"`
 }
 
