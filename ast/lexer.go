@@ -7,7 +7,6 @@ import (
 )
 
 var (
-	semicolonToken  = Lexer.Symbols()["Semicolon"]
 	parenToken      = Lexer.Symbols()["Paren"]
 	braceToken      = Lexer.Symbols()["Brace"]
 	newlineToken    = Lexer.Symbols()["Newline"]
@@ -47,12 +46,15 @@ func (l *semicolonLexer) Next() (lexer.Token, error) {
 
 		// Do we need to insert a semi-colon?
 		switch l.last.Value {
+		case ";", ",":
+			l.last = token
+			continue
 		case "}":
 			token.Value = ";"
 			token.Type = ';'
 		default:
 			switch l.last.Type {
-			case ';', semicolonToken, parenToken, braceToken, newlineToken, commentEndToken:
+			case parenToken, braceToken, newlineToken, commentEndToken:
 				l.last = token
 				continue
 			default:

@@ -24,8 +24,7 @@ var (
 			{"Paren", `\(`, lexer.Push("Paren")},
 			{"Ident", `\b([[:alpha:]_]\w*)\b`, nil},
 			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+*/%^!|&])`, nil},
-			{"Punct", `[][@:?.,]`, nil},
-			{"Semicolon", `;`, nil},
+			{"Punct", `[][@:;?.,]`, nil},
 			{"Newline", `\n`, nil},
 			{"Comment", `#`, lexer.Push("Comment")},
 		},
@@ -151,7 +150,7 @@ type Type struct {
 
 type Association struct {
 	Symbol string `parser:"@( ':' ':' )"`
-	Field  *Ident `parser:"@@"`
+	Ident  *Ident `parser:"@@"`
 }
 
 type StmtList struct {
@@ -260,7 +259,7 @@ type Subscript struct {
 
 type Selector struct {
 	Dot   string `parser:"@'.'"`
-	Field *Ident `parser:"@@"`
+	Ident *Ident `parser:"@@"`
 }
 
 type Literal struct {
