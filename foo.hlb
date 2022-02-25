@@ -1,0 +1,21 @@
+fun doMany(fs src, []string cmds) fs (fs working) {
+	image("node:alpine")
+	for (cmd in cmds) {
+		run(cmd) with {
+			dir("/in")
+			mount(src, "/in")
+			mount(working, "/out") as working
+		}
+	}
+}
+
+fun doStuff() fs (fs output) {
+	image("alpine")
+	run("echo foo > /out/msg") with {
+		mountStuff() as output
+	}
+}
+
+fun mountStuff() option::run (fs output) {
+	mount(scratch, "/out") as output
+}

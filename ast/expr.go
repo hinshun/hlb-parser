@@ -1,0 +1,168 @@
+package ast
+
+import (
+	"fmt"
+
+	participle "github.com/alecthomas/participle/v2"
+	"github.com/alecthomas/participle/v2/lexer"
+)
+
+var (
+	unaryParser = participle.MustBuild(
+		&Unary{},
+		participle.Lexer(Lexer),
+	)
+
+	operatorToken = Lexer.Symbols()["Operator"]
+)
+
+type Expr struct {
+	Unary *Unary
+
+	Left  *Expr
+	Op    Op
+	Right *Expr
+}
+
+// Parse expressions with a custom precedence climbing implementation.
+func (e *Expr) Parse(lex *lexer.PeekingLexer) error {
+	ex, err := parseExpr(lex, 0)
+	if err != nil {
+		return err
+	}
+	*e = *ex
+	return nil
+}
+
+type Op int
+
+const (
+	OpNone   Op = iota //
+	OpGe               // >=
+	OpLe               // <=
+	OpAnd              // &&
+	OpOr               // ||
+	OpEq               // ==
+	OpNe               // !=
+	OpSub              // -
+	OpAdd              // +
+	OpMul              // *
+	OpDiv              // /
+	OpLt               // <
+	OpGt               // >
+	OpMod              // %
+	OpPow              // ^
+	OpNot              // !
+	OpBitOr            // |
+	OpBitAnd           // &
+)
+
+func (o *Op) Capture(values []string) error {
+	switch values[0] {
+	case ">=":
+		*o = OpGe
+	case "<=":
+		*o = OpLe
+	case "&&":
+		*o = OpAnd
+	case "||":
+		*o = OpOr
+	case "==":
+		*o = OpEq
+	case "!=":
+		*o = OpNe
+	case "-":
+		*o = OpSub
+	case "+":
+		*o = OpAdd
+	case "*":
+		*o = OpMul
+	case "/":
+		*o = OpDiv
+	case "%":
+		*o = OpMod
+	case "<":
+		*o = OpLt
+	case ">":
+		*o = OpGt
+	case "^":
+		*o = OpPow
+	case "!":
+		*o = OpNot
+	default:
+		return fmt.Errorf("invalid expression operator %q", values[0])
+	}
+	return nil
+}
+
+type opInfo struct {
+	RightAssociative bool
+	Priority         int
+}
+
+var opTable = map[Op]opInfo{
+	OpAdd:    {Priority: 1},
+	OpSub:    {Priority: 1},
+	OpMul:    {Priority: 2},
+	OpDiv:    {Priority: 2},
+	OpMod:    {Priority: 2},
+	OpPow:    {RightAssociative: true, Priority: 3},
+	OpBitOr:  {Priority: 4},
+	OpBitAnd: {Priority: 4},
+}
+
+// Precedence climbing implementation based on
+// https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing
+func parseExpr(lex *lexer.PeekingLexer, minPrec int) (*Expr, error) {
+	lhs, err := parseOperand(lex)
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		token, err := lex.Peek(0)
+		if err != nil {
+			return nil, err
+		}
+		if token.Type != operatorToken {
+			break
+		}
+
+		expr := &Expr{}
+		err = expr.Op.Capture([]string{token.Value})
+		if err != nil {
+			return lhs, nil
+		}
+		if opTable[expr.Op].Priority < minPrec {
+			break
+		}
+
+		_, _ = lex.Next()
+		nextMinPrec := opTable[expr.Op].Priority
+		if !opTable[expr.Op].RightAssociative {
+			nextMinPrec++
+		}
+
+		rhs, err := parseExpr(lex, nextMinPrec)
+		if err != nil {
+			return nil, err
+		}
+
+		expr.Left = lhs
+		expr.Right = rhs
+		lhs = expr
+	}
+
+	return lhs, nil
+}
+
+func parseOperand(lex *lexer.PeekingLexer) (*Expr, error) {
+	// tok, _ := lex.Peek(0)
+
+	u := &Unary{}
+	err := unaryParser.ParseFromLexer(lex, u, participle.AllowTrailing(true))
+	if err != nil {
+		return nil, err
+	}
+	return &Expr{Unary: u}, nil
+}
