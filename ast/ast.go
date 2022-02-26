@@ -24,7 +24,7 @@ var (
 			{"Paren", `\(`, lexer.Push("Paren")},
 			{"Bracket", `\[`, lexer.Push("Bracket")},
 			{"Ident", `\b([[:alpha:]_]\w*)\b`, nil},
-			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+=*/%^!|&])`, nil},
+			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+=*/%<>^!|&])`, nil},
 			{"Punct", `[@:;?.,]`, nil},
 			{"Newline", `\n`, nil},
 			{"Comment", `#`, lexer.Push("Comment")},
@@ -173,6 +173,7 @@ type StmtList struct {
 type Stmt struct {
 	If       *IfStmt   `parser:"( @@ ';'?"`
 	For      *ForStmt  `parser:"| @@ ';'?"`
+	Entry    *Entry    `parser:"| @@ ';'?"`
 	Expr     *Expr     `parser:"| @@ ';'?"`
 	Newline  *Newline  `parser:"| @@"`
 	Comments *Comments `parser:"| @@ )"`
@@ -283,14 +284,16 @@ type Selector struct {
 }
 
 type Literal struct {
-	Block      *BlockLit     `parser:"( @@"`
-	Decimal    *int          `parser:"| @Decimal"`
-	Numeric    *NumericLit   `parser:"| @Numeric"`
-	Bool       *bool         `parser:"| @Bool"`
-	String     *StringLit    `parser:"| @@"`
-	RawString  *RawStringLit `parser:"| @@"`
-	Heredoc    *Heredoc      `parser:"| @@"`
-	RawHeredoc *RawHeredoc   `parser:"| @@ )"`
+	Block   *BlockLit   `parser:"( @@"`
+	Decimal *int        `parser:"| @Decimal"`
+	Numeric *NumericLit `parser:"| @Numeric"`
+	Bool    *bool       `parser:"| @Bool"`
+	String  *StringLit  `parser:"| @@ )"`
+}
+
+type Entry struct {
+	Keys  []*Ident `parser:"(@@ ':')+"`
+	Value *Expr    `parser:"@@"`
 }
 
 type BlockLit struct {
@@ -312,7 +315,8 @@ type ExprList struct {
 }
 
 type ExprStmt struct {
-	Expr     *Expr     `parser:"( @@ ','?"`
+	Entry    *Entry    `parser:"( @@ ','?"`
+	Expr     *Expr     `parser:"| @@ ','?"`
 	Newline  *Newline  `parser:"| @@"`
 	Comments *Comments `parser:"| @@ )"`
 }
@@ -372,6 +376,13 @@ func (l *NumericLit) Capture(tokens []string) error {
 }
 
 type StringLit struct {
+	String     *String     `parser:"( @@"`
+	RawString  *RawString  `parser:"| @@"`
+	Heredoc    *Heredoc    `parser:"| @@"`
+	RawHeredoc *RawHeredoc `parser:"| @@ )"`
+}
+
+type String struct {
 	Start     *Quote            `parser:"@@"`
 	Fragments []*StringFragment `parser:"@@*"`
 	End       *Quote            `parser:"@@"`
@@ -387,7 +398,7 @@ type StringFragment struct {
 	Text         *string       `parser:"| @Char )"`
 }
 
-type RawStringLit struct {
+type RawString struct {
 	Start *Backtick `parser:"@@"`
 	Text  string    `parser:"@RawChar"`
 	End   *Backtick `parser:"@@"`

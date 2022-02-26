@@ -53,6 +53,7 @@ const (
 	OpMod            // %
 	OpPow            // ^
 	OpNot            // !
+	OpMrg            // &
 )
 
 func (o *Op) Capture(values []string) error {
@@ -87,6 +88,8 @@ func (o *Op) Capture(values []string) error {
 		*o = OpPow
 	case "!":
 		*o = OpNot
+	case "&":
+		*o = OpMrg
 	default:
 		return fmt.Errorf("invalid expression operator %q", values[0])
 	}
@@ -105,6 +108,7 @@ var opTable = map[Op]opInfo{
 	OpDiv: {Priority: 2},
 	OpMod: {Priority: 2},
 	OpPow: {RightAssociative: true, Priority: 3},
+	OpMrg: {Priority: 4},
 }
 
 // Precedence climbing implementation based on

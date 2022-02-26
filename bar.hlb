@@ -1,33 +1,54 @@
-fun workspaces() []string {
-	""
-	"cli"
-	"apps/core"
-	"apps/fakire"
-	"apps/keymaster"
-	"apps/memberapi"
-	# ... 50 more workspaces
-}
+###########
+# openllb/go.hlb
 
-pub fun npmCI() fs ([]fs nodeModules) {
-	common.base()
-	run("npm ci --no-audit") with {
+pub fun build(
+	fs src, 
+	string package,
+	set config = {
+		base: image("golang:alpine")
+		static: true
+	},
+) fs {
+	config.base
+	run("go build -o /out/bin .") with {
 		dir("/in")
-		common.mountNpmCache
-		common.mountYarnCache
-		common.mountGulpCache("/in")
-		mount(common.manifests, "/in")
-
-		for (i, workspace in workspaces) {
-			mount(nodeModules[i], "/in/${workspace}/node_modules") as nodeModules[i]
+		mount(src, "/in")
+		if (config.static) {
+			
+		} else {
+			
 		}
 	}
 }
 
-fun mountNodeModules(string root) []option::run {
-	for (i, nodeModule in npmCI()@nodeModules) {
-		mount(
-			cache(nodeModule, common.titus(workspaces[i])),
-			"${root}/${workspaces[i]}/node_modules",
-		)
-	}
+pub fun test(
+	fs src,
+	string package,
+	set config = {
+		testflags: ""
+	},
+) fs {
+	# ...
+}
+
+###########
+# build.hlb
+
+fun default() fs {
+	test(
+		context("."),
+		"./cmd/hlb",
+		config: testflags: "-run TestParse",
+	)
+	test(
+		context("."),
+		"./cmd/hlb",
+		config: _ & common & {
+			testflags: "-run TestParse"
+		},
+	)
+}
+
+fun common() set {
+	testflags: "will be overrided"
 }
