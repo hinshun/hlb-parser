@@ -246,8 +246,15 @@ type Ref struct {
 }
 
 type Terminal struct {
-	Lit   *Literal `parser:"( @@"`
+	Group *Group   `parser:"( @@"`
+	Lit   *Literal `parser:"| @@"`
 	Ident *Ident   `parser:"| @@ )"`
+}
+
+type Group struct {
+	OpenParen  *OpenParen  `parser:"@@"`
+	Expr       *Expr       `parser:"@@"`
+	CloseParen *CloseParen `parser:"@@"`
 }
 
 type RefNext struct {
@@ -330,8 +337,8 @@ type With struct {
 }
 
 type AsClause struct {
-	As     *As    `parser:"@@"`
-	Effect *Ident `parser:"@@"`
+	As     *As  `parser:"@@"`
+	Effect *Ref `parser:"@@"`
 }
 
 type As struct {

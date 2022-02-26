@@ -1,3 +1,33 @@
-fun doMany(fs src, []string cmds = { "echo" }) fs (fs working) {
-	image("node:alpine")
+fun workspaces() []string {
+	""
+	"cli"
+	"apps/core"
+	"apps/fakire"
+	"apps/keymaster"
+	"apps/memberapi"
+	# ... 50 more workspaces
+}
+
+pub fun npmCI() fs ([]fs nodeModules) {
+	common.base()
+	run("npm ci --no-audit") with {
+		dir("/in")
+		common.mountNpmCache
+		common.mountYarnCache
+		common.mountGulpCache("/in")
+		mount(common.manifests, "/in")
+
+		for (i, workspace in workspaces) {
+			mount(nodeModules[i], "/in/${workspace}/node_modules") as nodeModules[i]
+		}
+	}
+}
+
+fun mountNodeModules(string root) []option::run {
+	for (i, nodeModule in npmCI()@nodeModules) {
+		mount(
+			cache(nodeModule, common.titus(workspaces[i])),
+			"${root}/${workspaces[i]}/node_modules",
+		)
+	}
 }
