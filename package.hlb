@@ -1,0 +1,7 @@
+description: "optional description"
+
+inputs: build: import("boost")
+
+inputs: test: import("testFramework")
+
+outputs: build

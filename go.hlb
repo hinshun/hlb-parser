@@ -1,0 +1,68 @@
+# Builds a reproducible static binary, by default.
+build: (src: fs, package: string) with (
+    base: attr {
+        image: scratch
+        version: "1.18"
+    }
+    flags: attr {
+        tags: ""
+        ldflags: ""
+    }
+    cgo: false
+    static: true
+) -> fs {
+    if (base.image != scratch) {
+        base.image
+    } else {
+        image("golang:${base.version}")
+    }
+
+    run <<~GO
+        go build
+            -o /out
+            -buildmode pie
+            -tags 'osusergo netgo static_build'
+            -ldflags '-extldflags "-fno-PIC -static"'
+            ${package}
+    GO with {
+	dir("/in")
+	mount(src, "/in")
+	mount(scratch, "/out")
+    }
+}
+
+# Runs tests on golang source code.
+test: () -> fs {
+}
+
+# Lints golang source code.
+lint: () -> fs {
+}
+
+# Cross-compiles binaries for all first class ports supported by golang.
+release: () -> fs {
+    for (port in firstClassPorts) {
+        port[0]
+    }
+}
+
+firstClassPorts: [][]string {
+    { "linux"; "amd64" }
+    { "linux"; "386" }
+    { "linux"; "arm" }
+    { "linux"; "arm64" }
+    { "darwin"; "amd64" }
+    { "windows"; "amd64" }
+    { "windows"; "386" }
+}
+
+# option<build>
+#############
+
+cgo: option<build> {
+    cgo: true
+}
+
+dynamicLink: option<build> {
+    static: false
+}

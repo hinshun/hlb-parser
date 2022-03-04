@@ -11,8 +11,7 @@ var (
 	Lexer = lexer.MustStateful(lexer.Rules{
 		"Root": {
 			{"whitespace", `[\r\t ]+`, nil},
-			{"Modifier", `\b(pub)\b`, nil},
-			{"Keyword", `\b(if|else|for|in|with|as|import|fun)\b`, nil},
+			{"Keyword", `\b(if|else|for|in|with|as)\b`, nil},
 			{"Numeric", `\b(0(b|B|o|O|x|X)[a-fA-F0-9]+)\b`, nil},
 			{"Decimal", `\b(0|[1-9][0-9]*)\b`, nil},
 			{"Bool", `\b(true|false)\b`, nil},
@@ -24,7 +23,7 @@ var (
 			{"Paren", `\(`, lexer.Push("Paren")},
 			{"Bracket", `\[`, lexer.Push("Bracket")},
 			{"Ident", `\b([[:alpha:]_]\w*)\b`, nil},
-			{"Operator", `(>=|<=|&&|\|\||==|!=|[-+=*/%<>^!|&])`, nil},
+			{"Operator", `(>=|<=|&&|\|\||==|!=|[-~+=*/%<>^!|&])`, nil},
 			{"Punct", `[@:;?.,]`, nil},
 			{"Newline", `\n`, nil},
 			{"Comment", `#`, lexer.Push("Comment")},
@@ -75,58 +74,70 @@ var (
 
 	Parser = participle.MustBuild(
 		&Module{},
-		participle.Lexer(&semicolonLexerDefinition{}),
+		participle.Lexer(Lexer),
 	)
 )
 
 type Module struct {
-	Comments *Comments `parser:"@@?"`
-
-	Decls []*Decl `parser:"@@*"`
+	Entries []*Entry `parser:"@@*"`
 }
 
-type Decl struct {
-	Import   *ImportDecl `parser:"( @@ ';'?"`
-	Func     *FuncDecl   `parser:"| @@ ';'?"`
-	Newline  *Newline    `parser:"| @@"`
-	Comments *Comments   `parser:"| @@ )"`
+type Entry struct {
+	Newline   *Newline   `parser:"( @@"`
+	Comments  *Comments  `parser:"| @@"`
+	Attribute *Attribute `parser:"| @@ )"`
 }
 
-type ImportDecl struct {
-	Import *Import `parser:"@@"`
-	Name   *Ident  `parser:"@@"`
-	From   *From   `parser:"@@"`
-	Expr   *Expr   `parser:"@@"`
+type Newline struct {
+	Text string `parser:"@Newline"`
 }
 
-type Import struct {
-	Text string `parser:"@'import'"`
+type Comments struct {
+	Comments []*Comment `parser:"@@+"`
 }
 
-type From struct {
-	Text string `parser:"@'from'"`
+type Comment struct {
+	Text string `parser:"Comment @(CommentText*) CommentEnd"`
 }
 
-type FuncDecl struct {
-	Modifiers []*Modifier `parser:"@@*"`
-	Func      *Func       `parser:"@@"`
-	Name      *Ident      `parser:"@@"`
-	Params    *FieldList  `parser:"@@"`
-	Type      *Type       `parser:"@@"`
-	Effects   *FieldList  `parser:"@@?"`
-	Body      *StmtList   `parser:"@@?"`
+type Attribute struct {
+	Keys  []*Ident `parser:"(@@ ':')+"`
+	Value *Expr    `parser:"@@"`
 }
 
-type Modifier struct {
-	Public *Public `@@`
+type Unary struct {
+	Op  Op   `parser:"@( '!' | '-' )?"`
+	Ref *Ref `parser:"@@"`
 }
 
-type Public struct {
-	Text string `parser:"@'pub'"`
+type Ref struct {
+	Terminal *Terminal `parser:"@@"`
+	Next     *RefNext  `parser:"@@?"`
+}
+
+type Terminal struct {
+	Func  *Func    `parser:"( @@"`
+	Group *Group   `parser:"| @@"`
+	Lit   *Literal `parser:"| @@"`
+	Ident *Ident   `parser:"| @@ )"`
 }
 
 type Func struct {
-	Text string `parser:"@'fun'"`
+	Params *FieldList `parser:"@@"`
+	At     *AtList    `parser:"@@?"`
+	With   *WithList  `parser:"@@?"`
+	Type   *Type      `parser:"'-' '>' @@"`
+	Body   *StmtList  `parser:"@@?"`
+}
+
+type AtList struct {
+	At   *At        `parser:"@@"`
+	List *FieldList `parser:"@@"`
+}
+
+type WithList struct {
+	With *With      `parser:"@@"`
+	List *EntryList `parser:"@@"`
 }
 
 type FieldList struct {
@@ -142,15 +153,14 @@ type FieldStmt struct {
 }
 
 type Field struct {
-	Type     *Type         `parser:"@@"`
-	Variadic *string       `parser:"@( '.' '.' '.' )?"`
-	Name     *Ident        `parser:"@@"`
-	Default  *FieldDefault `parser:"@@?"`
+	Name *Ident `parser:"@@ ':'"`
+	Type *Type  `parser:"@@"`
 }
 
-type FieldDefault struct {
-	Assign string `parser:"@'='"`
-	Unary  *Unary `parser:"@@"`
+type EntryList struct {
+	OpenParen  *OpenParen  `parser:"@@"`
+	Entries    []*Entry    `parser:"@@*"`
+	CloseParen *CloseParen `parser:"@@"`
 }
 
 type Type struct {
@@ -160,8 +170,9 @@ type Type struct {
 }
 
 type Association struct {
-	Symbol string `parser:"@( ':' ':' )"`
-	Ident  *Ident `parser:"@@"`
+	OpenAngle  string `parser:"@'<'"`
+	Ident      *Ident `parser:"@@"`
+	CloseAngle string `parser:"@'>'"`
 }
 
 type StmtList struct {
@@ -171,12 +182,12 @@ type StmtList struct {
 }
 
 type Stmt struct {
-	If       *IfStmt   `parser:"( @@ ';'?"`
-	For      *ForStmt  `parser:"| @@ ';'?"`
-	Entry    *Entry    `parser:"| @@ ';'?"`
-	Expr     *Expr     `parser:"| @@ ';'?"`
-	Newline  *Newline  `parser:"| @@"`
-	Comments *Comments `parser:"| @@ )"`
+	If        *IfStmt    `parser:"( @@ ';'?"`
+	For       *ForStmt   `parser:"| @@ ';'?"`
+	Attribute *Attribute `parser:"| @@ ';'?"`
+	Expr      *Expr      `parser:"| @@ ';'?"`
+	Newline   *Newline   `parser:"| @@"`
+	Comments  *Comments  `parser:"| @@ )"`
 }
 
 type IfStmt struct {
@@ -236,51 +247,10 @@ type In struct {
 	Text string `parser:"@'in'"`
 }
 
-type Unary struct {
-	Op  Op   `parser:"@( '!' | '-' )?"`
-	Ref *Ref `parser:"@@"`
-}
-
-type Ref struct {
-	Terminal *Terminal `parser:"@@"`
-	Next     *RefNext  `parser:"@@?"`
-}
-
-type Terminal struct {
-	Group *Group   `parser:"( @@"`
-	Lit   *Literal `parser:"| @@"`
-	Ident *Ident   `parser:"| @@ )"`
-}
-
 type Group struct {
 	OpenParen  *OpenParen  `parser:"@@"`
 	Expr       *Expr       `parser:"@@"`
 	CloseParen *CloseParen `parser:"@@"`
-}
-
-type RefNext struct {
-	Subscript *Subscript `parser:"( @@"`
-	Selector  *Selector  `parser:"| @@"`
-	Call      *Call      `parser:"| @@"`
-	Splat     *Splat     `parser:"| @@ )"`
-	Next      *RefNext   `@@?`
-}
-
-type Splat struct {
-	Text string `parser:"@('.' '.' '.')"`
-}
-
-type Subscript struct {
-	OpenBracket  *OpenBracket  `parser:"@@"`
-	LeftExpr     *Expr         `parser:"( @@?"`
-	Colon        *string       `parser:"@':'?"`
-	RightExpr    *Expr         `parser:"@@? )!"`
-	CloseBracket *CloseBracket `parser:"@@"`
-}
-
-type Selector struct {
-	Dot   string `parser:"@'.'"`
-	Ident *Ident `parser:"@@"`
 }
 
 type Literal struct {
@@ -291,62 +261,9 @@ type Literal struct {
 	String  *StringLit  `parser:"| @@ )"`
 }
 
-type Entry struct {
-	Keys  []*Ident `parser:"(@@ ':')+"`
-	Value *Expr    `parser:"@@"`
-}
-
 type BlockLit struct {
 	Type  *Type     `parser:"@@?"`
 	Block *StmtList `parser:"@@"`
-}
-
-type Call struct {
-	Args *ExprList   `parser:"@@?"`
-	At   *AtClause   `parser:"@@?"`
-	With *WithClause `parser:"@@?"`
-	As   *AsClause   `parser:"@@?"`
-}
-
-type ExprList struct {
-	OpenParen  *OpenParen  `parser:"@@"`
-	Exprs      []*ExprStmt `parser:"@@*"`
-	CloseParen *CloseParen `parser:"@@"`
-}
-
-type ExprStmt struct {
-	Entry    *Entry    `parser:"( @@ ','?"`
-	Expr     *Expr     `parser:"| @@ ','?"`
-	Newline  *Newline  `parser:"| @@"`
-	Comments *Comments `parser:"| @@ )"`
-}
-
-type AtClause struct {
-	At     *At    `parser:"@@"`
-	Effect *Ident `parser:"@@"`
-}
-
-type At struct {
-	Text string `parser:"@'@'"`
-}
-
-type WithClause struct {
-	With    *With `parser:"@@"`
-	Expr    *Expr `parser:"@@"`
-	Closure *FuncDecl
-}
-
-type With struct {
-	Text string `parser:"@'with'"`
-}
-
-type AsClause struct {
-	As     *As  `parser:"@@"`
-	Effect *Ref `parser:"@@"`
-}
-
-type As struct {
-	Text string `parser:"@'as'"`
 }
 
 type NumericLit struct {
@@ -446,16 +363,75 @@ type Ident struct {
 	Text string `parser:"@Ident"`
 }
 
-type Newline struct {
-	Text string `parser:"@Newline"`
+type RefNext struct {
+	Subscript *Subscript `parser:"( @@"`
+	Selector  *Selector  `parser:"| @@"`
+	Call      *Call      `parser:"| @@"`
+	Splat     *Splat     `parser:"| @@ )"`
+	Next      *RefNext   `@@?`
 }
 
-type Comments struct {
-	Comments []*Comment `parser:"@@+"`
+type Subscript struct {
+	OpenBracket  *OpenBracket  `parser:"@@"`
+	LeftExpr     *Expr         `parser:"( @@?"`
+	Colon        *string       `parser:"@':'?"`
+	RightExpr    *Expr         `parser:"@@? )!"`
+	CloseBracket *CloseBracket `parser:"@@"`
 }
 
-type Comment struct {
-	Text string `parser:"Comment @(CommentText*) CommentEnd"`
+type Selector struct {
+	Dot   string `parser:"@'.'"`
+	Ident *Ident `parser:"@@"`
+}
+
+type Call struct {
+	Args *ExprList   `parser:"@@?"`
+	At   *AtClause   `parser:"@@?"`
+	With *WithClause `parser:"@@?"`
+	As   *AsClause   `parser:"@@?"`
+}
+
+type Splat struct {
+	Text string `parser:"@('.' '.' '.')"`
+}
+
+type ExprList struct {
+	OpenParen  *OpenParen  `parser:"@@"`
+	Exprs      []*ExprStmt `parser:"@@*"`
+	CloseParen *CloseParen `parser:"@@"`
+}
+
+type ExprStmt struct {
+	Expr     *Expr     `parser:"( @@ ','?"`
+	Newline  *Newline  `parser:"| @@"`
+	Comments *Comments `parser:"| @@ )"`
+}
+
+type AtClause struct {
+	At     *At    `parser:"@@"`
+	Effect *Ident `parser:"@@"`
+}
+
+type At struct {
+	Text string `parser:"@'@'"`
+}
+
+type WithClause struct {
+	With *With `parser:"@@"`
+	Expr *Expr `parser:"@@"`
+}
+
+type With struct {
+	Text string `parser:"@'with'"`
+}
+
+type AsClause struct {
+	As     *As  `parser:"@@"`
+	Effect *Ref `parser:"@@"`
+}
+
+type As struct {
+	Text string `parser:"@'as'"`
 }
 
 type OpenBrace struct {

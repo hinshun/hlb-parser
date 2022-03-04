@@ -1,54 +1,25 @@
-###########
-# openllb/go.hlb
+test: npmRun(src, npmInstall(manifests)@nodeModules, "unit-test")
 
-pub fun build(
-	fs src, 
-	string package,
-	set config = {
-		base: image("golang:alpine")
-		static: true
-	},
-) fs {
-	config.base
-	run("go build -o /out/bin .") with {
-		dir("/in")
-		mount(src, "/in")
-		if (config.static) {
-			
-		} else {
-			
-		}
-	}
+src: context("**/*.js")
+
+manifests: context("package.json", "package-lock.json")
+
+npmInstall: (manifests: fs) @ (nodeModules: fs) -> fs {
+    	image("node:alpine")
+    	run("npm install") with {
+        	dir("/in")
+        	mount(manifests, "/in")
+        	mount(scratch, "/in/node_modules") as nodeModules
+    	}
 }
 
-pub fun test(
-	fs src,
-	string package,
-	set config = {
-		testflags: ""
-	},
-) fs {
-	# ...
-}
+npmRun: (src: fs, nodeModules: fs, command: string) -> fs {
+    image("node:alpine")
+    run("npm run ${command}") with {
+        dir("/in")
+        mount(src, "/in")
+        mount(nodeModules, "/in/node_modules")
+    }
 
-###########
-# build.hlb
-
-fun default() fs {
-	test(
-		context("."),
-		"./cmd/hlb",
-		config: testflags: "-run TestParse",
-	)
-	test(
-		context("."),
-		"./cmd/hlb",
-		config: _ & common & {
-			testflags: "-run TestParse"
-		},
-	)
-}
-
-fun common() set {
-	testflags: "will be overrided"
+    foo: bar: "baz";
 }
