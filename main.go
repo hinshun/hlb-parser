@@ -17,7 +17,7 @@ func main() {
 }
 
 func run() error {
-	f, err := os.Open("./go.hlb")
+	f, err := os.Open("./baz.hlb")
 	if err != nil {
 		return err
 	}

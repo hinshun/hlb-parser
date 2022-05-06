@@ -17,14 +17,14 @@ build: (src: fs, package: string) with (
         image("golang:${base.version}")
     }
 
-    run <<~GO
+    run(<<~GO
         go build
             -o /out
             -buildmode pie
             -tags 'osusergo netgo static_build'
             -ldflags '-extldflags "-fno-PIC -static"'
             ${package}
-    GO with {
+    GO) with {
 	dir("/in")
 	mount(src, "/in")
 	mount(scratch, "/out")

@@ -8,10 +8,11 @@ import (
 )
 
 var (
+	// Lexer lexes HLB into tokens for the parser.
 	Lexer = lexer.MustStateful(lexer.Rules{
 		"Root": {
 			{"whitespace", `[\r\t ]+`, nil},
-			{"Keyword", `\b(if|else|for|in|with|as)\b`, nil},
+			{"Keyword", `\b(if|else|for|in|match|with|as)\b`, nil},
 			{"Numeric", `\b(0(b|B|o|O|x|X)[a-fA-F0-9]+)\b`, nil},
 			{"Decimal", `\b(0|[1-9][0-9]*)\b`, nil},
 			{"Bool", `\b(true|false)\b`, nil},
@@ -23,7 +24,8 @@ var (
 			{"Paren", `\(`, lexer.Push("Paren")},
 			{"Bracket", `\[`, lexer.Push("Bracket")},
 			{"Ident", `\b([[:alpha:]_]\w*)\b`, nil},
-			{"Operator", `(>=|<=|&&|\|\||==|!=|[-~+=*/%<>^!|&])`, nil},
+			{"Assignment", `(\^=|\+=|-=|\*=|/=|\|=|&=|%=|=)`, nil},
+			{"Operator", `(>=|<=|&&|\|\||==|!=|[-~+*/%<>^!|&])`, nil},
 			{"Punct", `[@:;?.,]`, nil},
 			{"Newline", `\n`, nil},
 			{"Comment", `#`, lexer.Push("Comment")},
@@ -46,8 +48,8 @@ var (
 			{"Text", `\$|[^\s$]+`, nil},
 		},
 		"RawHeredoc": {
-			{"RawHeredocEnd", `\b\1\b`, lexer.Pop()},
-			{"Whitespace", `\s+`, nil},
+			{"HeredocEnd", `\b\1\b`, lexer.Pop()},
+			{"Spaces", `\s+`, nil},
 			{"RawText", `[^\s]+`, nil},
 		},
 		"Interpolated": {
@@ -79,13 +81,13 @@ var (
 )
 
 type Module struct {
-	Entries []*Entry `parser:"@@*"`
+	Attrs []*AttrStmt `parser:"@@*"`
 }
 
-type Entry struct {
-	Newline   *Newline   `parser:"( @@"`
-	Comments  *Comments  `parser:"| @@"`
-	Attribute *Attribute `parser:"| @@ )"`
+type AttrStmt struct {
+	Newline  *Newline  `parser:"( @@"`
+	Comments *Comments `parser:"| @@"`
+	Attr     *Attr     `parser:"| @@ )"`
 }
 
 type Newline struct {
@@ -100,9 +102,20 @@ type Comment struct {
 	Text string `parser:"Comment @(CommentText*) CommentEnd"`
 }
 
-type Attribute struct {
-	Keys  []*Ident `parser:"(@@ ':')+"`
-	Value *Expr    `parser:"@@"`
+type Attr struct {
+	Keys     []*Ident  `parser:"( (@@ ':')*"`
+	Destruct *Destruct `parser:"(@@ ':')? )!"`
+	Expr     *Expr     `parser:"@@"`
+}
+
+type Destruct struct {
+	Start  *OpenBrace  `parser:"@@"`
+	Idents []*Ident    `parser:"@@ (',' @@)*"`
+	Fin    *CloseBrace `parser:"@@"`
+}
+
+type Ident struct {
+	Text string `parser:"@Ident"`
 }
 
 type Unary struct {
@@ -116,10 +129,9 @@ type Ref struct {
 }
 
 type Terminal struct {
-	Func  *Func    `parser:"( @@"`
-	Group *Group   `parser:"| @@"`
-	Lit   *Literal `parser:"| @@"`
-	Ident *Ident   `parser:"| @@ )"`
+	Func  *Func  `parser:"( @@"`
+	Group *Group `parser:"| @@"`
+	Lit   *Lit   `parser:"| @@ )"`
 }
 
 type Func struct {
@@ -130,26 +142,16 @@ type Func struct {
 	Body   *StmtList  `parser:"@@?"`
 }
 
-type AtList struct {
-	At   *At        `parser:"@@"`
-	List *FieldList `parser:"@@"`
-}
-
-type WithList struct {
-	With *With      `parser:"@@"`
-	List *EntryList `parser:"@@"`
-}
-
 type FieldList struct {
-	OpenParen  *OpenParen   `parser:"@@"`
-	Fields     []*FieldStmt `parser:"@@*"`
-	CloseParen *CloseParen  `parser:"@@"`
+	Start  *OpenParen   `parser:"@@"`
+	Fields []*FieldStmt `parser:"@@*"`
+	Fin    *CloseParen  `parser:"@@"`
 }
 
 type FieldStmt struct {
-	Field    *Field    `parser:"( @@ ','?"`
-	Newline  *Newline  `parser:"| @@"`
-	Comments *Comments `parser:"| @@ )"`
+	Newline  *Newline  `parser:"( @@"`
+	Comments *Comments `parser:"| @@"`
+	Field    *Field    `parser:"| @@ ','? )"`
 }
 
 type Field struct {
@@ -157,71 +159,82 @@ type Field struct {
 	Type *Type  `parser:"@@"`
 }
 
-type EntryList struct {
-	OpenParen  *OpenParen  `parser:"@@"`
-	Entries    []*Entry    `parser:"@@*"`
-	CloseParen *CloseParen `parser:"@@"`
+type AtList struct {
+	At   *At        `parser:"@@"`
+	List *FieldList `parser:"@@"`
+}
+
+type WithList struct {
+	With *With     `parser:"@@"`
+	List *AttrList `parser:"@@"`
+}
+
+type AttrList struct {
+	Start *OpenParen  `parser:"@@"`
+	Attrs []*AttrStmt `parser:"@@*"`
+	Fin   *CloseParen `parser:"@@"`
 }
 
 type Type struct {
-	Scalar      *Ident       `parser:"( @@"`
-	Array       *Type        `parser:"| '[' ']' @@ )"`
-	Association *Association `parser:"@@?"`
+	Scalar  *Ident   `parser:"( @@"`
+	Array   *Type    `parser:"| '[' ']' @@ )"`
+	Subtype *Subtype `parser:"@@?"`
 }
 
-type Association struct {
+type Subtype struct {
 	OpenAngle  string `parser:"@'<'"`
-	Ident      *Ident `parser:"@@"`
+	Type       *Type  `parser:"@@"`
 	CloseAngle string `parser:"@'>'"`
 }
 
 type StmtList struct {
-	OpenBrace  *OpenBrace  `parser:"@@"`
-	Stmts      []*Stmt     `parser:"@@*"`
-	CloseBrace *CloseBrace `parser:"@@"`
+	Start *OpenBrace  `parser:"@@"`
+	Stmts []*Stmt     `parser:"@@*"`
+	Fin   *CloseBrace `parser:"@@"`
 }
 
 type Stmt struct {
-	If        *IfStmt    `parser:"( @@ ';'?"`
-	For       *ForStmt   `parser:"| @@ ';'?"`
-	Attribute *Attribute `parser:"| @@ ';'?"`
-	Expr      *Expr      `parser:"| @@ ';'?"`
-	Newline   *Newline   `parser:"| @@"`
-	Comments  *Comments  `parser:"| @@ )"`
+	Newline  *Newline   `parser:"( @@"`
+	Comments *Comments  `parser:"| @@"`
+	If       *IfStmt    `parser:"| @@ ';'?"`
+	For      *ForStmt   `parser:"| @@ ';'?"`
+	Match    *MatchStmt `parser:"| @@ ';'?"`
+	Attr     *Attr      `parser:"| @@ ';'?"`
+	Expr     *ExprStmt  `parser:"| @@ ';'? )"`
 }
 
 type IfStmt struct {
-	If        *If           `parser:"@@"`
-	Condition *Condition    `parser:"@@"`
-	Body      *StmtList     `parser:"@@"`
-	ElseIfs   []*ElseIfStmt `parser:"@@*"`
-	Else      *ElseStmt     `parser:"@@?"`
-}
-
-type Condition struct {
-	OpenParen  *OpenParen  `parser:"@@"`
-	Expr       *Expr       `parser:"@@"`
-	CloseParen *CloseParen `parser:"@@"`
-}
-
-type ElseIfStmt struct {
-	Else      *Else      `parser:"@@"`
-	If        *If        `parser:"@@"`
-	Condition *Condition `parser:"@@"`
-	Body      *StmtList  `parser:"@@"`
-}
-
-type ElseStmt struct {
-	Else *Else     `parser:"@@"`
-	Body *StmtList `parser:"@@"`
+	If      *If           `parser:"@@"`
+	Cond    *Group        `parser:"@@"`
+	Body    *StmtList     `parser:"@@"`
+	ElseIfs []*ElseIfStmt `parser:"@@*"`
+	Else    *ElseStmt     `parser:"@@?"`
 }
 
 type If struct {
 	Text string `parser:"@'if'"`
 }
 
+type Group struct {
+	Start *OpenParen  `parser:"@@"`
+	Expr  *Expr       `parser:"@@"`
+	Fin   *CloseParen `parser:"@@"`
+}
+
+type ElseIfStmt struct {
+	Else *Else     `parser:"@@"`
+	If   *If       `parser:"@@"`
+	Cond *Group    `parser:"@@"`
+	Body *StmtList `parser:"@@"`
+}
+
 type Else struct {
 	Text string `parser:"@'else'"`
+}
+
+type ElseStmt struct {
+	Else *Else     `parser:"@@"`
+	Body *StmtList `parser:"@@"`
 }
 
 type ForStmt struct {
@@ -235,35 +248,61 @@ type For struct {
 }
 
 type ForHeader struct {
-	OpenParen  *OpenParen  `parser:"@@"`
-	Counter    *Ident      `parser:"( @@ ',' )?"`
-	Var        *Ident      `parser:"@@"`
-	In         *In         `parser:"@@"`
-	Iterable   *Expr       `parser:"@@"`
-	CloseParen *CloseParen `parser:"@@"`
+	Start    *OpenParen  `parser:"@@"`
+	Counter  *Ident      `parser:"( @@ ',' )?"`
+	Var      *Ident      `parser:"@@"`
+	In       *In         `parser:"@@"`
+	Iterable *Expr       `parser:"@@"`
+	Fin      *CloseParen `parser:"@@"`
 }
 
 type In struct {
 	Text string `parser:"@'in'"`
 }
 
-type Group struct {
-	OpenParen  *OpenParen  `parser:"@@"`
-	Expr       *Expr       `parser:"@@"`
-	CloseParen *CloseParen `parser:"@@"`
+type MatchStmt struct {
+	Match *MatchKW `parser:"@@"`
+	Group *Group   `parser:"@@"`
+	Body  *ArmList `parser:"@@"`
 }
 
-type Literal struct {
-	Block   *BlockLit   `parser:"( @@"`
-	Decimal *int        `parser:"| @Decimal"`
-	Numeric *NumericLit `parser:"| @Numeric"`
-	Bool    *bool       `parser:"| @Bool"`
-	String  *StringLit  `parser:"| @@ )"`
+type MatchKW struct {
+	Text string `parser:"@'match'"`
 }
 
-type BlockLit struct {
-	Type  *Type     `parser:"@@?"`
-	Block *StmtList `parser:"@@"`
+type ArmList struct {
+	Start *OpenBrace  `parser:"@@"`
+	Arms  []*ArmStmt  `parser:"@@*"`
+	Fin   *CloseBrace `parser:"@@"`
+}
+
+type ArmStmt struct {
+	Newline  *Newline  `parser:"( @@"`
+	Comments *Comments `parser:"| @@"`
+	Arm      *Arm      `parser:"| @@ ';'? )"`
+}
+
+type Arm struct {
+	Pattern *Expr `parser:"@@ ':'"`
+	Expr    *Expr `parser:"@@"`
+}
+
+type ExprStmt struct {
+	LHS *Expr `parser:"@@"`
+	Op  Op    `parser:"( @Assignment"`
+	RHS *Expr `parser:"@@ )?"`
+}
+
+type Lit struct {
+	Value      *Type         `parser:"( ( @@?"`
+	Block      *StmtList     `parser:"@@? )!"`
+	Decimal    *int          `parser:"| @Decimal"`
+	Numeric    *NumericLit   `parser:"| @Numeric"`
+	Bool       *string       `parser:"| @Bool"`
+	Str        *StringLit    `parser:"| @@"`
+	RawStr     *RawStringLit `parser:"| @@"`
+	Heredoc    *Heredoc      `parser:"| @@"`
+	RawHeredoc *RawHeredoc   `parser:"| @@ )"`
 }
 
 type NumericLit struct {
@@ -293,16 +332,9 @@ func (l *NumericLit) Capture(tokens []string) error {
 }
 
 type StringLit struct {
-	String     *String     `parser:"( @@"`
-	RawString  *RawString  `parser:"| @@"`
-	Heredoc    *Heredoc    `parser:"| @@"`
-	RawHeredoc *RawHeredoc `parser:"| @@ )"`
-}
-
-type String struct {
 	Start     *Quote            `parser:"@@"`
 	Fragments []*StringFragment `parser:"@@*"`
-	End       *Quote            `parser:"@@"`
+	Fin       *Quote            `parser:"@@"`
 }
 
 type Quote struct {
@@ -315,10 +347,10 @@ type StringFragment struct {
 	Text         *string       `parser:"| @Char )"`
 }
 
-type RawString struct {
+type RawStringLit struct {
 	Start *Backtick `parser:"@@"`
 	Text  string    `parser:"@RawChar"`
-	End   *Backtick `parser:"@@"`
+	Fin   *Backtick `parser:"@@"`
 }
 
 type Backtick struct {
@@ -329,7 +361,7 @@ type Heredoc struct {
 	Value     string
 	Start     string             `parser:"@Heredoc"`
 	Fragments []*HeredocFragment `parser:"@@*"`
-	End       *HeredocEnd        `parser:"@@"`
+	Fin       *HeredocEnd        `parser:"@@"`
 }
 
 type HeredocFragment struct {
@@ -340,43 +372,40 @@ type HeredocFragment struct {
 }
 
 type HeredocEnd struct {
-	Text string `parser:"@(HeredocEnd | RawHeredocEnd)"`
+	Text string `parser:"@HeredocEnd"`
 }
 
 type RawHeredoc struct {
 	Start     string             `parser:"@RawHeredoc"`
 	Fragments []*HeredocFragment `parser:"@@*"`
-	End       *HeredocEnd        `parser:"@@"`
+	Fin       *HeredocEnd        `parser:"@@"`
 }
 
 type Interpolated struct {
 	Start *OpenInterpolated `parser:"@@"`
 	Expr  *Expr             `parser:"@@?"`
-	End   *CloseBrace       `parser:"@@"`
+	Fin   *CloseBrace       `parser:"@@"`
 }
 
 type OpenInterpolated struct {
 	Text string `parser:"@Interpolated"`
 }
 
-type Ident struct {
-	Text string `parser:"@Ident"`
-}
-
 type RefNext struct {
 	Subscript *Subscript `parser:"( @@"`
 	Selector  *Selector  `parser:"| @@"`
+	Splat     *Splat     `parser:"| @@"`
 	Call      *Call      `parser:"| @@"`
-	Splat     *Splat     `parser:"| @@ )"`
+	As        *AsClause  `parser:"| @@ )"`
 	Next      *RefNext   `@@?`
 }
 
 type Subscript struct {
-	OpenBracket  *OpenBracket  `parser:"@@"`
-	LeftExpr     *Expr         `parser:"( @@?"`
-	Colon        *string       `parser:"@':'?"`
-	RightExpr    *Expr         `parser:"@@? )!"`
-	CloseBracket *CloseBracket `parser:"@@"`
+	Start *OpenBracket  `parser:"@@"`
+	Left  *Expr         `parser:"( @@?"`
+	Colon *string       `parser:"@':'?"`
+	Right *Expr         `parser:"@@? )!"`
+	Fin   *CloseBracket `parser:"@@"`
 }
 
 type Selector struct {
@@ -384,27 +413,31 @@ type Selector struct {
 	Ident *Ident `parser:"@@"`
 }
 
-type Call struct {
-	Args *ExprList   `parser:"@@?"`
-	At   *AtClause   `parser:"@@?"`
-	With *WithClause `parser:"@@?"`
-	As   *AsClause   `parser:"@@?"`
-}
-
 type Splat struct {
 	Text string `parser:"@('.' '.' '.')"`
 }
 
-type ExprList struct {
-	OpenParen  *OpenParen  `parser:"@@"`
-	Exprs      []*ExprStmt `parser:"@@*"`
-	CloseParen *CloseParen `parser:"@@"`
+type Call struct {
+	Args *ArgList    `parser:"@@"`
+	At   *AtClause   `parser:"@@?"`
+	With *WithClause `parser:"@@?"`
 }
 
-type ExprStmt struct {
-	Expr     *Expr     `parser:"( @@ ','?"`
-	Newline  *Newline  `parser:"| @@"`
-	Comments *Comments `parser:"| @@ )"`
+type ArgList struct {
+	Start *OpenParen  `parser:"@@"`
+	Args  []*ArgStmt  `parser:"@@*"`
+	Fin   *CloseParen `parser:"@@"`
+}
+
+type ArgStmt struct {
+	Newline  *Newline  `parser:"( @@"`
+	Comments *Comments `parser:"| @@"`
+	Arg      *Arg      `parser:"| @@ ','? )"`
+}
+
+type Arg struct {
+	Field *Ident `parser:"( @@ ':' )?"`
+	Expr  *Expr  `parser:"@@"`
 }
 
 type AtClause struct {
@@ -426,12 +459,30 @@ type With struct {
 }
 
 type AsClause struct {
-	As     *As  `parser:"@@"`
-	Effect *Ref `parser:"@@"`
+	As    *As         `parser:"@@"`
+	Ident *Ident      `parser:"( @@"`
+	List  *AssignList `parser:"| @@ )"`
 }
 
 type As struct {
 	Text string `parser:"@'as'"`
+}
+
+type AssignList struct {
+	Start   *OpenParen    `parser:"@@"`
+	Assigns []*AssignStmt `parser:"@@*"`
+	Fin     *CloseParen   `parser:"@@"`
+}
+
+type AssignStmt struct {
+	Newline  *Newline  `parser:"( @@"`
+	Comments *Comments `parser:"| @@"`
+	Assign   *Assign   `parser:"| @@ ';'? )"`
+}
+
+type Assign struct {
+	Name   *Ident `parser:"@@ ':'"`
+	Effect *Ident `parser:"'@' @@"`
 }
 
 type OpenBrace struct {

@@ -34,30 +34,52 @@ func (e *Expr) Parse(lex *lexer.PeekingLexer) error {
 	return nil
 }
 
-type Op int
+type Op string
 
 const (
-	OpNone Op = iota //
-	OpGe             // >=
-	OpLe             // <=
-	OpAnd            // &&
-	OpOr             // ||
-	OpEq             // ==
-	OpNe             // !=
-	OpSub            // -
-	OpAdd            // +
-	OpMul            // *
-	OpDiv            // /
-	OpLt             // <
-	OpGt             // >
-	OpMod            // %
-	OpPow            // ^
-	OpNot            // !
-	OpMrg            // &
+	OpNone    Op = ""
+	OpAsgn    Op = "="
+	OpAddAsgn Op = "+="
+	OpSubAsgn Op = "-="
+	OpMulAsgn Op = "*="
+	OpDivAsgn Op = "/="
+	OpModAsgn Op = "%="
+	OpPowAsgn Op = "^="
+	OpGe      Op = ">="
+	OpLe      Op = "<="
+	OpAnd     Op = "&&"
+	OpOr      Op = "||"
+	OpEq      Op = "=="
+	OpNe      Op = "!="
+	OpSub     Op = "-"
+	OpAdd     Op = "+"
+	OpMul     Op = "*"
+	OpDiv     Op = "/"
+	OpLt      Op = "<"
+	OpGt      Op = ">"
+	OpMod     Op = "%"
+	OpPow     Op = "^"
+	OpNot     Op = "!"
+	OpMrg     Op = "&"
+	OpUn      Op = "|"
 )
 
 func (o *Op) Capture(values []string) error {
 	switch values[0] {
+	case "%=":
+		*o = OpModAsgn
+	case "+=":
+		*o = OpAddAsgn
+	case "-=":
+		*o = OpSubAsgn
+	case "/=":
+		*o = OpDivAsgn
+	case "*=":
+		*o = OpMulAsgn
+	case "^=":
+		*o = OpPowAsgn
+	case "=":
+		*o = OpAsgn
 	case ">=":
 		*o = OpGe
 	case "<=":
@@ -90,6 +112,8 @@ func (o *Op) Capture(values []string) error {
 		*o = OpNot
 	case "&":
 		*o = OpMrg
+	case "|":
+		*o = OpUn
 	default:
 		return fmt.Errorf("invalid expression operator %q", values[0])
 	}
@@ -109,6 +133,7 @@ var opTable = map[Op]opInfo{
 	OpMod: {Priority: 2},
 	OpPow: {RightAssociative: true, Priority: 3},
 	OpMrg: {Priority: 4},
+	OpUn:  {Priority: 4},
 }
 
 // Precedence climbing implementation based on
